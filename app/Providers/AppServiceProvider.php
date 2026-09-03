@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\File;
 use App\Observers\DocumentObserver;
 use App\Observers\FileObserver;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 
@@ -28,5 +29,9 @@ class AppServiceProvider extends ServiceProvider
 
         File::observe(FileObserver::class);
         Document::observe(DocumentObserver::class);
+
+        if ($this->app->environment('production')) {
+            URL::forceScheme('https');
+        }
     }
 }

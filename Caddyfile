@@ -7,12 +7,9 @@
     root * /app/public
     encode zstd gzip
 
-    # Proxy exclusivo para los WebSockets de Reverb
+    # Proxy exclusivo para WebSockets
     reverse_proxy /app/* 127.0.0.1:8081
 
-    # Servir archivos estáticos (CSS, JS, imágenes) directamente
-    file_server
-
-    # Procesar peticiones dinámicas de Laravel
-    php
+    # Servidor PHP y estáticos todo-en-uno
+    php_server
 }

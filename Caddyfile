@@ -1,17 +1,18 @@
 {
-    auto_https off
     frankenphp
+    auto_https off
 }
 
 :{$PORT:80} {
     root * /app/public
+    encode zstd gzip
 
-    handle /app* {
-        reverse_proxy 127.0.0.1:8081
-    }
+    # Proxy exclusivo para los WebSockets de Reverb
+    reverse_proxy /app/* 127.0.0.1:8081
 
-    handle {
-        php
-        file_server
-    }
+    # Servir archivos estáticos (CSS, JS, imágenes) directamente
+    file_server
+
+    # Procesar peticiones dinámicas de Laravel
+    php
 }

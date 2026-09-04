@@ -1,17 +1,17 @@
 {
     auto_https off
+    frankenphp
 }
 
 :{$PORT:80} {
+    root * /app/public
+
     handle /app* {
         reverse_proxy 127.0.0.1:8081
     }
 
     handle {
-        root * /app/public
-        php_fastcgi 127.0.0.1:9000 {
-            env HTTPS "on"
-        }
+        php
         file_server
     }
 }

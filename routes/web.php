@@ -55,6 +55,7 @@ Route::middleware(['auth', 'verified', 'permission:users.manage'])->prefix('admi
     Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
     Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
+    Route::patch('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
     Route::patch('/users/{user}/role', [AdminUserController::class, 'updateRole'])->name('users.update-role');
     Route::patch('/users/{user}/permissions', [AdminUserController::class, 'syncPermissions'])->name('users.sync-permissions');
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');

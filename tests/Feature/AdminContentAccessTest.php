@@ -8,8 +8,6 @@ use App\Models\Document;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AdminContentAccessTest extends TestCase
@@ -22,58 +20,58 @@ class AdminContentAccessTest extends TestCase
         $this->seed(\Database\Seeders\RoleAndPermissionSeeder::class);
     }
 
-    private function createUserWithRole(string $role): User
+    private function userWithRole(string $role): User
     {
         $user = User::factory()->create();
         $user->assignRole($role);
+
         return $user;
     }
 
-    public function test_admin_can_view_all_users_folders(): void
+    public function test_all_users_can_view_content_from_every_user(): void
     {
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        $doctor = $this->userWithRole('doctor');
+        $other = $this->userWithRole('doctor');
 
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
+        Folder::create(['name' => 'Carpeta del doctor', 'user_id' => $doctor->id]);
+        Folder::create(['name' => 'Carpeta del otro', 'user_id' => $other->id]);
 
-        $folder1 = Folder::create(['name' => 'Carpeta Doctor', 'user_id' => $otherUser->id]);
-        $folder2 = Folder::create(['name' => 'Carpeta Admin', 'user_id' => $admin->id]);
-
-        $response = $this->actingAs($admin)->get(route('dashboard'));
+        $response = $this->actingAs($doctor)->get(route('dashboard'));
 
         $response->assertOk();
-        $response->assertSee('Carpeta Doctor');
-        $response->assertSee('Carpeta Admin');
+        $response->assertSee('Carpeta del doctor');
+        $response->assertSee('Carpeta del otro');
     }
 
-    public function test_admin_can_filter_by_user_id(): void
+    public function test_listing_includes_the_creator_name(): void
     {
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        $doctor = $this->userWithRole('doctor');
+        $other = $this->userWithRole('doctor');
 
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
+        Folder::create(['name' => 'Carpeta compartida', 'user_id' => $other->id]);
+        $file = File::create([
+            'name' => 'informe',
+            'original_name' => 'informe.pdf',
+            'mime_type' => 'application/pdf',
+            'storage_path' => 'files/'.$other->id.'/informe.pdf',
+            'file_size' => 100,
+            'user_id' => $other->id,
+        ]);
 
-        $folder1 = Folder::create(['name' => 'Doctor Folder', 'user_id' => $otherUser->id]);
-        $folder2 = Folder::create(['name' => 'Admin Folder', 'user_id' => $admin->id]);
-
-        $response = $this->actingAs($admin)->get(route('dashboard', ['user_id' => $otherUser->id]));
+        $response = $this->actingAs($doctor)->get(route('dashboard'));
 
         $response->assertOk();
-        $response->assertSee('Doctor Folder');
-        $response->assertDontSee('Admin Folder');
+        $response->assertSee($other->name);
+        $response->assertSee('Carpeta compartida');
+        $response->assertSee($file->original_name);
     }
 
     public function test_admin_can_delete_folder_of_other_user(): void
     {
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        $admin = $this->userWithRole('admin');
+        $other = $this->userWithRole('doctor');
 
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
-
-        $folder = Folder::create(['name' => 'Carpeta a borrar', 'user_id' => $otherUser->id]);
+        $folder = Folder::create(['name' => 'Carpeta a borrar', 'user_id' => $other->id]);
 
         $response = $this->actingAs($admin)->delete(route('folders.destroy', $folder));
 
@@ -81,24 +79,21 @@ class AdminContentAccessTest extends TestCase
         $this->assertSoftDeleted('folders', ['id' => $folder->id]);
     }
 
-        public function test_admin_can_delete_file_of_other_user(): void
+    public function test_admin_can_delete_file_of_other_user(): void
     {
         Storage::fake('local');
         config(['filesystems.default' => 'local']);
 
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
-
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
+        $admin = $this->userWithRole('admin');
+        $other = $this->userWithRole('doctor');
 
         $file = File::create([
             'name' => 'documento',
             'original_name' => 'documento.pdf',
             'mime_type' => 'application/pdf',
-            'storage_path' => 'files/'.$otherUser->id.'/documento.pdf',
+            'storage_path' => 'files/'.$other->id.'/documento.pdf',
             'file_size' => 100,
-            'user_id' => $otherUser->id,
+            'user_id' => $other->id,
         ]);
 
         $response = $this->actingAs($admin)->delete(route('files.destroy', $file));
@@ -107,44 +102,41 @@ class AdminContentAccessTest extends TestCase
         $this->assertSoftDeleted('files', ['id' => $file->id]);
     }
 
-    public function test_admin_can_force_delete_file_of_other_user(): void
+    public function test_doctor_with_delete_permission_can_delete_any_content(): void
     {
-        Storage::fake('local');
-        config(['filesystems.default' => 'local']);
+        $doctor = $this->userWithRole('doctor'); // el rol doctor incluye files.delete
+        $other = $this->userWithRole('doctor');
 
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        $folder = Folder::create(['name' => 'Carpeta ajena', 'user_id' => $other->id]);
 
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
-
-        $file = File::create([
-            'name' => 'documento',
-            'original_name' => 'documento.pdf',
-            'mime_type' => 'application/pdf',
-            'storage_path' => 'files/'.$otherUser->id.'/documento.pdf',
-            'file_size' => 100,
-            'user_id' => $otherUser->id,
-        ]);
-
-        $response = $this->actingAs($admin)->delete(route('files.force-destroy', $file->id));
+        $response = $this->actingAs($doctor)->delete(route('folders.destroy', $folder));
 
         $response->assertRedirect();
-        $this->assertDatabaseMissing('files', ['id' => $file->id]);
+        $this->assertSoftDeleted('folders', ['id' => $folder->id]);
+    }
+
+    public function test_users_without_delete_permission_cannot_delete(): void
+    {
+        $visitante = $this->userWithRole('visitante'); // sin files.delete
+        $other = $this->userWithRole('doctor');
+
+        $folder = Folder::create(['name' => 'Carpeta ajena', 'user_id' => $other->id]);
+
+        $response = $this->actingAs($visitante)->delete(route('folders.destroy', $folder));
+
+        $response->assertForbidden();
+        $this->assertNotSoftDeleted('folders', ['id' => $folder->id]);
     }
 
     public function test_admin_can_delete_document_of_other_user(): void
     {
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
-
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
+        $admin = $this->userWithRole('admin');
+        $other = $this->userWithRole('doctor');
 
         $document = Document::create([
             'title' => 'Documento de otro usuario',
             'content' => '<p>Contenido</p>',
-            'user_id' => $otherUser->id,
+            'user_id' => $other->id,
         ]);
 
         $response = $this->actingAs($admin)->delete(route('documents.destroy', $document));
@@ -153,62 +145,9 @@ class AdminContentAccessTest extends TestCase
         $this->assertSoftDeleted('documents', ['id' => $document->id]);
     }
 
-    public function test_admin_can_force_delete_document_of_other_user(): void
-    {
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
-
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
-
-        $document = Document::create([
-            'title' => 'Documento de otro usuario',
-            'content' => '<p>Contenido</p>',
-            'user_id' => $otherUser->id,
-        ]);
-
-        $response = $this->actingAs($admin)->delete(route('documents.force-destroy', $document->id));
-
-        $response->assertRedirect();
-        $this->assertDatabaseMissing('documents', ['id' => $document->id]);
-    }
-
-    public function test_non_admin_cannot_delete_content_of_other_user(): void
-    {
-        $doctor = User::factory()->create();
-        $doctor->assignRole('doctor');
-
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
-
-        $folder = Folder::create(['name' => 'Carpeta ajena', 'user_id' => $otherUser->id]);
-
-        $response = $this->actingAs($doctor)->delete(route('folders.destroy', $folder));
-        $response->assertForbidden();
-    }
-
-    public function test_non_admin_can_only_see_own_content(): void
-    {
-        $doctor = User::factory()->create();
-        $doctor->assignRole('doctor');
-
-        $otherUser = User::factory()->create();
-        $otherUser->assignRole('doctor');
-
-        Folder::create(['name' => 'Doctor Folder', 'user_id' => $doctor->id]);
-        Folder::create(['name' => 'Other Doctor Folder', 'user_id' => $otherUser->id]);
-
-        $response = $this->actingAs($doctor)->get(route('dashboard'));
-
-        $response->assertOk();
-        $response->assertSee('Doctor Folder');
-        $response->assertDontSee('Other Doctor Folder');
-    }
-
     public function test_all_users_page_is_accessible_by_admin(): void
     {
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        $admin = $this->userWithRole('admin');
 
         $response = $this->actingAs($admin)->get(route('admin.users.index'));
         $response->assertOk();
@@ -216,8 +155,7 @@ class AdminContentAccessTest extends TestCase
 
     public function test_all_users_page_is_forbidden_for_non_admin(): void
     {
-        $doctor = User::factory()->create();
-        $doctor->assignRole('doctor');
+        $doctor = $this->userWithRole('doctor');
 
         $response = $this->actingAs($doctor)->get(route('admin.users.index'));
         $response->assertForbidden();

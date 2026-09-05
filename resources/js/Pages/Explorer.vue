@@ -73,6 +73,7 @@ const formatSize = bytes => {
 const ownerName = item => item.user?.name || 'Usuario desconocido';
 const modifierName = item => item.updated_by?.name || ownerName(item);
 const modifiedDate = item => item.updated_at ? new Date(item.updated_at).toLocaleString('es-MX') : 'Sin fecha';
+const createdDate = item => item.created_at ? new Date(item.created_at).toLocaleString('es-MX') : 'Sin fecha';
 const documentPreviewHtml = document => document.content || '<p>Documento vacío.</p>';
 </script>
 
@@ -102,11 +103,12 @@ const documentPreviewHtml = document => document.content || '<p>Documento vacío
                 </div>
                 <div v-if="!showTrash" class="explorer-dropzone" :class="{ 'explorer-dropzone-active': isDragging }" @dragover.prevent="isDragging = true" @dragleave.prevent="isDragging = false" @drop.prevent="handleDrop"><span>Arrastra archivos aquí o</span><label>selecciona uno<input type="file" class="hidden" accept=".pdf,.png,.jpg,.jpeg,.docx" @change="selectFile" /></label><button v-if="selectedFile && !previewMode" type="button" @click="uploadFile">{{ uploadForm.processing ? 'Subiendo...' : `Subir ${selectedFile.name}` }}</button></div>
                 <section class="explorer-content-panel">
-                    <div class="explorer-list-header"><span>Nombre</span><span>Tipo</span><span>Modificado</span><span>Acciones</span></div>
+                    <div class="explorer-list-header"><span>Nombre</span><span>Tipo</span><span>Creado</span><span>Modificado</span><span>Acciones</span></div>
                     <div v-if="!items.length" class="px-5 py-16 text-center text-sm text-slate-500">No hay elementos en esta carpeta.</div>
                     <div v-for="item in items" :key="`${item.kind}-${item.id}`" class="explorer-row" @dblclick="item.kind === 'folder' ? openFolder(item.id) : router.visit(item.kind === 'document' ? route('documents.edit', item.id) : route('files.edit', item.id))">
                         <button type="button" class="explorer-name-cell" @click="item.kind === 'folder' ? openFolder(item.id) : item.kind === 'file' ? previewFile(item) : previewDocument(item)"><span class="explorer-item-icon">{{ item.kind === 'folder' ? '▰' : item.kind === 'document' ? '▤' : isPdf(item) ? '▧' : '▱' }}</span><span class="min-w-0 truncate font-medium text-slate-800">{{ item.label }}</span></button>
                         <span class="explorer-type">{{ item.kind === 'folder' ? 'Carpeta' : item.kind === 'document' ? 'Documento' : `${item.mime_type} · ${formatSize(item.file_size)}` }}</span>
+                        <span class="explorer-meta"><strong>{{ ownerName(item) }}</strong><small>{{ createdDate(item) }}</small></span>
                         <span class="explorer-meta"><strong>{{ modifierName(item) }}</strong><small>{{ modifiedDate(item) }}</small></span>
                         <div class="explorer-actions"><template v-if="showTrash"><button type="button" @click="restore(`${item.kind}s`, item.id)">Restaurar</button><button class="danger" type="button" @click="forceDelete(`${item.kind}s`, item.id)">Eliminar</button></template><template v-else><button v-if="item.kind === 'file' && (isPdf(item) || isDocx(item))" type="button" @click="previewFile(item)">Vista previa</button><Link v-if="item.kind === 'document'" :href="route('documents.edit', item.id)">Abrir</Link><a v-if="item.kind === 'file'" :href="route('files.download', item.id)">Descargar</a><button class="danger" type="button" @click="remove(`${item.kind}s`, item.id)">Eliminar</button></template></div>
                     </div>
@@ -149,7 +151,7 @@ const documentPreviewHtml = document => document.content || '<p>Documento vacío
 .explorer-preview-body img { max-width: 100%; height: auto; }
 .explorer-preview-body table { width: 100%; border-collapse: collapse; }
 .explorer-preview-body td, .explorer-preview-body th { border: 1px solid #cbd5e1; padding: 0.35rem; }
-.explorer-list-header, .explorer-row { display: grid; grid-template-columns: minmax(16rem, 2fr) minmax(10rem, 1fr) minmax(12rem, 1fr) minmax(12rem, 1fr); align-items: center; gap: 1rem; padding: 0.7rem 1rem; }
+.explorer-list-header, .explorer-row { display: grid; grid-template-columns: minmax(14rem, 2fr) minmax(9rem, 1fr) minmax(10rem, 1.1fr) minmax(10rem, 1.1fr) minmax(11rem, 1.2fr); align-items: center; gap: 1rem; padding: 0.7rem 1rem; }
 .explorer-list-header { border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
 .explorer-row { min-height: 3.4rem; border-bottom: 1px solid #f1f5f9; font-size: 0.8rem; }
 .explorer-row:hover { background: #f8fafc; }
@@ -161,6 +163,6 @@ const documentPreviewHtml = document => document.content || '<p>Documento vacío
 .explorer-actions { display: flex; flex-wrap: wrap; gap: 0.65rem; }
 .explorer-actions button, .explorer-actions a { color: #2563eb; font-size: 0.75rem; font-weight: 600; }
 .explorer-actions .danger { color: #dc2626; }
-@media (max-width: 900px) { .explorer-sidebar { width: 13rem; flex-basis: 13rem; } .explorer-list-header, .explorer-row { grid-template-columns: minmax(12rem, 2fr) minmax(8rem, 1fr) minmax(9rem, 1fr); } .explorer-list-header span:nth-child(2), .explorer-row > .explorer-type { display: none; } }
+@media (max-width: 900px) { .explorer-sidebar { width: 13rem; flex-basis: 13rem; } .explorer-list-header, .explorer-row { grid-template-columns: minmax(11rem, 2fr) minmax(7rem, 1fr) minmax(8rem, 1fr) minmax(8rem, 1fr); } .explorer-list-header span:nth-child(2), .explorer-row > .explorer-type { display: none; } }
 @media (max-width: 640px) { .explorer-layout { display: block; } .explorer-sidebar { width: 100%; min-height: auto; border-right: 0; border-bottom: 1px solid #dbe2ea; } .explorer-sidebar > .folder-tree-item:nth-of-type(n+7) { display: none; } .explorer-main { padding: 0.75rem; } .explorer-list-header { display: none; } .explorer-row { grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; padding: 0.75rem; } .explorer-meta { grid-column: 1; grid-row: 2; } .explorer-actions { grid-column: 2; grid-row: 1 / span 2; flex-direction: column; align-items: flex-end; } }
 </style>

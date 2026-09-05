@@ -1,12 +1,13 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
     users: { type: Array, required: true },
     roles: { type: Array, required: true },
     permissions: { type: Array, required: true },
+    rolePermissions: { type: Object, default: () => ({}) },
 });
 
 const showCreateModal = ref(false);
@@ -19,6 +20,22 @@ const createForm = useForm({
     role: props.roles[0] ?? '',
     permissions: [],
 });
+
+// Permisos por defecto del rol seleccionado actualmente.
+const defaultPermissionsForRole = computed(() => props.rolePermissions[createForm.role] || []);
+
+// Al cambiar el rol, precargar sus permisos por defecto en el formulario.
+watch(defaultPermissionsForRole, (perms) => {
+    if (createForm.role) {
+        createForm.permissions = [...perms];
+    }
+});
+
+const openCreateModal = () => {
+    createForm.reset('name', 'email', 'password', 'password_confirmation');
+    createForm.permissions = [...defaultPermissionsForRole.value];
+    showCreateModal.value = true;
+};
 
 const togglePermission = (name) => {
     const index = createForm.permissions.indexOf(name);
@@ -53,7 +70,7 @@ const submitCreate = () => {
                 <button
                     type="button"
                     class="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
-                    @click="showCreateModal = true"
+                    @click="openCreateModal"
                 >
                     + Crear usuario
                 </button>
@@ -132,7 +149,8 @@ const submitCreate = () => {
                 </select>
                 <p v-if="createForm.errors.role" class="mt-1 text-sm text-red-600">{{ createForm.errors.role }}</p>
 
-                <p class="mt-4 block text-sm font-medium text-slate-700">Permisos individuales</p>
+                <p class="mt-4 block text-sm font-medium text-slate-700">Permisos</p>
+                <p class="text-xs text-slate-500">Al cambiar el rol se cargan sus permisos por defecto. Puedes marcarlos o desmarcarlos libremente para este usuario.</p>
                 <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <label
                         v-for="permission in permissions"

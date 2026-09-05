@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\SyncUserPermissionsRequest;
+use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Http\Requests\Admin\UpdateUserRoleRequest;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -36,6 +37,7 @@ class UserController extends Controller
             'users' => $users,
             'roles' => Role::query()->orderBy('name')->pluck('name'),
             'permissions' => Permission::query()->orderBy('name')->pluck('name'),
+            'rolePermissions' => $this->rolePermissionsMap(),
         ]);
     }
 
@@ -49,14 +51,15 @@ class UserController extends Controller
             'password' => $request->validated('password'),
         ]);
 
+        // El rol se asigna como etiqueta y base; los permisos marcados se guardan
+        // como permisos efectivos (se pueden ajustar después).
         $user->assignRole($request->validated('role'));
-        $directPermissions = collect($request->validated('permissions'));
-        $user->syncPermissions($directPermissions);
+        $user->syncPermissions($request->validated('permissions'));
 
         $auditLogger->log('admin.user.created', $user, [
             'email' => $user->email,
             'role' => $request->validated('role'),
-            'direct_permissions' => $directPermissions->values()->all(),
+            'permissions' => $request->validated('permissions'),
         ]);
 
         return redirect()
@@ -69,8 +72,7 @@ class UserController extends Controller
         $this->authorize('update', $user);
 
         $allPermissions = Permission::query()->orderBy('name')->pluck('name');
-        $rolePermissions = $user->getPermissionsViaRoles()->pluck('name');
-        $directPermissions = $user->getDirectPermissions()->pluck('name');
+        $effectivePermissions = $user->getAllPermissions()->pluck('name');
 
         return Inertia::render('Admin/Users/Edit', [
             'managedUser' => [
@@ -80,13 +82,32 @@ class UserController extends Controller
                 'role' => $user->roles->first()?->name,
             ],
             'roles' => Role::query()->orderBy('name')->pluck('name'),
+            'rolePermissions' => $this->rolePermissionsMap(),
             'permissions' => $allPermissions->map(fn (string $name) => [
                 'name' => $name,
-                'via_role' => $rolePermissions->contains($name),
-                'direct' => $directPermissions->contains($name),
-                'effective' => $user->hasPermissionTo($name),
+                'active' => $effectivePermissions->contains($name),
             ])->values(),
         ]);
+    }
+
+    /**
+     * Guarda rol + permisos de una sola vez (flujo consolidado).
+     */
+    public function update(UpdateUserRequest $request, User $user, AuditLogger $auditLogger): RedirectResponse
+    {
+        $this->authorize('update', $user);
+
+        $previousRole = $user->roles->first()?->name;
+        $user->syncRoles([$request->validated('role')]);
+        $user->syncPermissions($request->validated('permissions'));
+
+        $auditLogger->log('admin.user.updated', $user, [
+            'previous_role' => $previousRole,
+            'new_role' => $request->validated('role'),
+            'permissions' => $request->validated('permissions'),
+        ]);
+
+        return back()->with('success', 'Rol y permisos actualizados correctamente.');
     }
 
     public function updateRole(UpdateUserRoleRequest $request, User $user, AuditLogger $auditLogger): RedirectResponse
@@ -116,5 +137,20 @@ class UserController extends Controller
         ]);
 
         return back()->with('success', 'Permisos individuales actualizados.');
+    }
+
+    /**
+     * Mapa de permisos por rol, usado por el frontend para precargar los
+     * permisos por defecto al seleccionar un rol.
+     */
+    private function rolePermissionsMap(): array
+    {
+        return Role::query()
+            ->with('permissions:id,name')
+            ->get()
+            ->mapWithKeys(fn (Role $role) => [
+                $role->name => $role->permissions->pluck('name')->sort()->values()->all(),
+            ])
+            ->all();
     }
 }

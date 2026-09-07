@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { usePermissions } from '@/composables/usePermissions';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -17,6 +18,7 @@ const errorMessage = ref('');
 const zoomLevel = ref(100);
 const currentPage = ref(1);
 const totalPages = ref(0);
+const { can } = usePermissions();
 
 let pdfDocument = null;
 
@@ -102,7 +104,7 @@ onBeforeUnmount(() => {
                         <button type="button" class="min-w-10 rounded px-2 py-1 text-center text-sm font-medium text-slate-700 hover:bg-slate-100" title="Restablecer zoom" @click="resetZoom">{{ zoomLevel }}%</button>
                         <button type="button" class="rounded px-2 py-1 text-sm text-slate-700 hover:bg-slate-100" title="Acercar" @click="zoomIn">+</button>
                     </div>
-                    <a :href="route('files.download', file.id)" class="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Descargar</a>
+                    <a v-if="can('files.download')" :href="route('files.download', file.id)" class="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Descargar</a>
                     <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" @click="emit('close')">Cerrar</button>
                 </div>
             </header>

@@ -14,6 +14,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class UserController extends Controller
 {
@@ -51,15 +52,26 @@ class UserController extends Controller
             'password' => $request->validated('password'),
         ]);
 
-        // El rol se asigna como etiqueta y base; los permisos marcados se guardan
-        // como permisos efectivos (se pueden ajustar después).
-        $user->assignRole($request->validated('role'));
-        $user->syncPermissions($request->validated('permissions'));
+        $roleName = $request->validated('role');
+        $pickedPermissions = collect($request->validated('permissions'));
+        $roleDefaults = collect($this->rolePermissionsMap()[$roleName] ?? []);
+
+        // Los permisos marcados que no pertenecen al rol se guardan como directos;
+        // los permisos del rol que quedaron desmarcados se guardan como exenciones
+        // para ESTE usuario (aunque el rol los conceda).
+        $directPermissions = $pickedPermissions->diff($roleDefaults)->values();
+        $exemptions = $roleDefaults->diff($pickedPermissions)->values();
+
+        $user->assignRole($roleName);
+        $user->syncPermissions($directPermissions);
+        $user->syncExemptedPermissions($exemptions->all());
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $auditLogger->log('admin.user.created', $user, [
             'email' => $user->email,
-            'role' => $request->validated('role'),
-            'permissions' => $request->validated('permissions'),
+            'role' => $roleName,
+            'direct_permissions' => $directPermissions->all(),
+            'exemptions' => $exemptions->all(),
         ]);
 
         return redirect()
@@ -98,13 +110,26 @@ class UserController extends Controller
         $this->authorize('update', $user);
 
         $previousRole = $user->roles->first()?->name;
-        $user->syncRoles([$request->validated('role')]);
-        $user->syncPermissions($request->validated('permissions'));
+        $newRole = $request->validated('role');
+        $pickedPermissions = collect($request->validated('permissions'));
+        $roleDefaults = collect($this->rolePermissionsMap()[$newRole] ?? []);
+
+        // Se guardan como directos solo los permisos que no son por defecto del rol.
+        // Al cambiar de rol no se arrastran permisos antiguos; y los permisos del rol
+        // desmarcados se guardan como exenciones para este usuario.
+        $directPermissions = $pickedPermissions->diff($roleDefaults)->values();
+        $exemptions = $roleDefaults->diff($pickedPermissions)->values();
+
+        $user->syncRoles([$newRole]);
+        $user->syncPermissions($directPermissions);
+        $user->syncExemptedPermissions($exemptions->all());
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $auditLogger->log('admin.user.updated', $user, [
             'previous_role' => $previousRole,
-            'new_role' => $request->validated('role'),
-            'permissions' => $request->validated('permissions'),
+            'new_role' => $newRole,
+            'direct_permissions' => $directPermissions->all(),
+            'exemptions' => $exemptions->all(),
         ]);
 
         return back()->with('success', 'Rol y permisos actualizados correctamente.');
@@ -116,6 +141,7 @@ class UserController extends Controller
 
         $previousRole = $user->roles->first()?->name;
         $user->syncRoles([$request->validated('role')]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $auditLogger->log('admin.user.role_update', $user, [
             'previous_role' => $previousRole,
@@ -131,6 +157,7 @@ class UserController extends Controller
 
         $directPermissions = collect($request->validated('permissions'));
         $user->syncPermissions($directPermissions);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $auditLogger->log('admin.user.permissions_sync', $user, [
             'direct_permissions' => $directPermissions->values()->all(),

@@ -24,16 +24,22 @@ const createForm = useForm({
 // Permisos por defecto del rol seleccionado actualmente.
 const defaultPermissionsForRole = computed(() => props.rolePermissions[createForm.role] || []);
 
-// Al cambiar el rol, precargar sus permisos por defecto en el formulario.
+// Al cambiar el rol, recargar sus permisos por defecto conservando los extras
+// marcados que no eran por defecto del rol anterior.
+let lastRole = createForm.role;
 watch(defaultPermissionsForRole, (perms) => {
-    if (createForm.role) {
-        createForm.permissions = [...perms];
-    }
+    if (!createForm.role) return;
+
+    const oldDefaults = props.rolePermissions[lastRole] || [];
+    const extras = createForm.permissions.filter((name) => !oldDefaults.includes(name));
+    createForm.permissions = [...new Set([...perms, ...extras])];
+    lastRole = createForm.role;
 });
 
 const openCreateModal = () => {
     createForm.reset('name', 'email', 'password', 'password_confirmation');
     createForm.permissions = [...defaultPermissionsForRole.value];
+    lastRole = createForm.role;
     showCreateModal.value = true;
 };
 
@@ -150,7 +156,7 @@ const submitCreate = () => {
                 <p v-if="createForm.errors.role" class="mt-1 text-sm text-red-600">{{ createForm.errors.role }}</p>
 
                 <p class="mt-4 block text-sm font-medium text-slate-700">Permisos</p>
-                <p class="text-xs text-slate-500">Al cambiar el rol se cargan sus permisos por defecto. Puedes marcarlos o desmarcarlos libremente para este usuario.</p>
+                <p class="text-xs text-slate-500">Al cambiar el rol se cargan sus permisos por defecto. Los extras marcados se conservan.</p>
                 <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <label
                         v-for="permission in permissions"

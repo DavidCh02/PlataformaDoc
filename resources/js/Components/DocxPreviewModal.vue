@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { renderAsync } from 'docx-preview';
+import { usePermissions } from '@/composables/usePermissions';
 
 const props = defineProps({
     file: { type: Object, required: true },
@@ -13,6 +14,7 @@ const container = ref(null);
 const loading = ref(true);
 const errorMessage = ref('');
 const zoomLevel = ref(100);
+const { can } = usePermissions();
 
 const zoomIn = () => { zoomLevel.value = Math.min(200, zoomLevel.value + 20); };
 const zoomOut = () => { zoomLevel.value = Math.max(50, zoomLevel.value - 20); };
@@ -86,7 +88,7 @@ onBeforeUnmount(() => {
                         <button type="button" class="rounded px-2 py-1 text-sm text-slate-700 hover:bg-slate-100" title="Acercar" @click="zoomIn">+</button>
                     </div>
                     <a :href="route('files.download', file.id)" class="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Descargar original</a>
-                    <button type="button" class="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700" @click="emit('edit')">Editar en Plataforma</button>
+                    <button v-if="can('docs.edit_realtime')" type="button" class="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700" @click="emit('edit')">Editar en Plataforma</button>
                     <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" @click="emit('close')">Cerrar</button>
                 </div>
             </header>

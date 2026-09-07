@@ -5,6 +5,7 @@ namespace App\Services;
 use PhpOffice\PhpWord\Element\Image;
 use PhpOffice\PhpWord\Element\Link;
 use PhpOffice\PhpWord\Element\ListItem;
+use PhpOffice\PhpWord\Element\ListItemRun;
 use PhpOffice\PhpWord\Element\PageBreak;
 use PhpOffice\PhpWord\Element\Table;
 use PhpOffice\PhpWord\Element\TextBreak;
@@ -34,6 +35,17 @@ class PhpWordToHtmlConverter
 
     private ?ZipArchive $zip = null;
 
+    /**
+     * Mapa de numId => [nivel => ['start' => int, 'fmt' => 'ul'|'ol', 'type' => ?string]].
+     */
+    private array $numberingFormatMap = [];
+
+    /**
+     * Contadores de numeración por numId/nivel para continuar un listado
+     * aunque haya párrafos intermedios (contadores reseteado por contenedor).
+     */
+    private array $listCounters = [];
+
     public function __construct(PhpWord $phpWord, string $sourcePath)
     {
         $this->phpWord = $phpWord;
@@ -43,6 +55,7 @@ class PhpWordToHtmlConverter
     public function convert(): string
     {
         $this->openZip();
+        $this->numberingFormatMap = $this->readNumberingFormats();
 
         $html = '';
         foreach ($this->phpWord->getSections() as $section) {
@@ -53,12 +66,13 @@ class PhpWordToHtmlConverter
 
         $html = trim($html);
         $background = $this->pageBackgroundColor();
+        $head = "<!-- pdoc-editor-version:4 -->\n";
 
         if ($background !== null) {
-            return "<!-- word-page-background:#{$background} -->\n{$html}";
+            return $head."<!-- word-page-background:#{$background} -->\n{$html}";
         }
 
-        return $html;
+        return $head.$html;
     }
 
     private function openZip(): void
@@ -104,6 +118,7 @@ class PhpWordToHtmlConverter
     {
         $html = '';
         $pendingList = [];
+        $this->listCounters = [];
 
         $flushList = function () use (&$html, &$pendingList): void {
             if ($pendingList !== []) {
@@ -113,7 +128,10 @@ class PhpWordToHtmlConverter
         };
 
         foreach ($elements as $element) {
-            if ($element instanceof ListItem) {
+            // ListItem es el elemento "clásico"; ListItemRun es el que produce
+            // el lector DOCX cuando un párrafo lleva w:numPr. Ambos se
+            // agrupan contiguos para emitir <ul>/<ol> anidados.
+            if ($element instanceof ListItem || $element instanceof ListItemRun) {
                 $pendingList[] = $element;
 
                 continue;
@@ -265,25 +283,278 @@ private function writeTitle(Title $title): string
 
     private function writeListGroup(array $items): string
     {
-        $html = '<ul style="margin:0.35em 0 0.35em 1.1em;padding-left:1.5em">';
+        $entries = [];
 
         foreach ($items as $item) {
-            $inner = $this->escapeText($item->getText());
-            $textObject = method_exists($item, 'getTextObject') ? $item->getTextObject() : null;
+            $numId = null;
+            $depth = 0;
 
-            if ($textObject !== null
-                && method_exists($textObject, 'getFontStyle')
-                && $textObject->getFontStyle() instanceof Font) {
-                $css = $this->fontCss($textObject->getFontStyle());
-                if ($css !== '') {
-                    $inner = '<span style="'.$css.'">'.$inner.'</span>';
+            if ($item instanceof ListItemRun) {
+                $depth = (int) $item->getDepth();
+                $style = $item->getStyle();
+                $numStyle = $style !== null ? (string) $style->getNumStyle() : '';
+                if (preg_match('/^PHPWordList(\d+)$/', $numStyle, $matches) === 1) {
+                    $numId = (int) $matches[1];
+                }
+                $inner = $this->writeListItemRun($item);
+            } else {
+                $depth = (int) $item->getDepth();
+                $inner = $this->escapeText($item->getText());
+                $textObject = method_exists($item, 'getTextObject') ? $item->getTextObject() : null;
+                if ($textObject !== null
+                    && method_exists($textObject, 'getFontStyle')
+                    && $textObject->getFontStyle() instanceof Font) {
+                    $css = $this->fontCss($textObject->getFontStyle());
+                    if ($css !== '') {
+                        $inner = '<span style="'.$css.'">'.$inner.'</span>';
+                    }
                 }
             }
 
-            $html .= '<li>'.$inner.'</li>';
+            $def = $this->listLevelDef($numId, $depth);
+            $fmt = $def['fmt'] ?? 'ul';
+            $type = $def['type'] ?? null;
+            $num = $def['start'] ?? 1;
+
+            if ($numId !== null) {
+                $counters = &$this->listCounters[$numId];
+                if (! is_array($counters)) {
+                    $counters = [];
+                }
+                // Un ítem de nivel superior reinicia los niveles más profundos.
+                foreach (array_keys($counters) as $level) {
+                    if ($level > $depth) {
+                        unset($counters[$level]);
+                    }
+                }
+                $counters[$depth] = ($counters[$depth] ?? 0) + 1;
+                $num = ($def['start'] ?? 1) + $counters[$depth] - 1;
+            }
+
+            $entries[] = [
+                'depth' => $depth,
+                'fmt' => $fmt,
+                'type' => $type,
+                'num' => max(1, $num),
+                'html' => $inner,
+            ];
         }
 
-        return $html.'</ul>';
+        return $this->writeNestedList($entries, 0);
+    }
+
+    /**
+     * Renderiza el contenido de un ítem de lista leído desde el DOCX
+     * (ListItemRun extiende TextRun, de modo que sus "hijos" son runs).
+     */
+    private function writeListItemRun(ListItemRun $item): string
+    {
+        $content = '';
+        foreach ($item->getElements() as $element) {
+            $content .= $this->writeRunElement($element);
+        }
+
+        return $content;
+    }
+
+    /**
+     * Construye <ul>/<ol> anidados a partir de los niveles de profundidad,
+     * conservando el número inicial (start) y el formato de cada nivel.
+     */
+    private function writeNestedList(array &$entries, int $baseDepth): string
+    {
+        $html = '';
+
+        while ($entries !== []) {
+            $head = $entries[0];
+            if ($head['depth'] < $baseDepth) {
+                break;
+            }
+            if ($head['depth'] > $baseDepth) {
+                $baseDepth = $head['depth'];
+            }
+
+            $tag = $head['fmt'] === 'ol' ? 'ol' : 'ul';
+            $html .= '<'.$tag.' style="margin:0;padding-left:1.5em"'.$this->listAttrs($tag, $head).'>';
+
+            while ($entries !== []
+                && $entries[0]['depth'] === $baseDepth
+                && $entries[0]['fmt'] === $head['fmt']) {
+                $entry = array_shift($entries);
+                $html .= '<li>'.$entry['html'];
+
+                if ($entries !== [] && $entries[0]['depth'] > $baseDepth) {
+                    $html .= $this->writeNestedList($entries, max($baseDepth + 1, $entries[0]['depth']));
+                }
+
+                $html .= '</li>';
+            }
+
+            $html .= '</'.$tag.'>';
+        }
+
+        return $html;
+    }
+
+    /**
+     * Atributos start/type para una lista numerada (solo <ol>).
+     */
+    private function listAttrs(string $tag, array $head): string
+    {
+        if ($tag !== 'ol') {
+            return '';
+        }
+
+        $attrs = '';
+        if (($head['num'] ?? 1) !== 1) {
+            $attrs .= ' start="'.(int) $head['num'].'"';
+        }
+        if (! empty($head['type'])) {
+            $attrs .= ' type="'.htmlspecialchars((string) $head['type'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'"';
+        }
+
+        return $attrs;
+    }
+
+    /**
+     * Devuelve la definición de numeración para numId/nivel, o null.
+     */
+    private function listLevelDef(?int $numId, int $depth): ?array
+    {
+        if ($numId === null) {
+            return null;
+        }
+
+        return $this->numberingFormatMap[$numId][$depth] ?? null;
+    }
+
+    /**
+     * Lee word/numbering.xml y mapea numId => [nivel => definición] con el
+     * valor inicial (w:start/w:startOverride), el tipo de lista (ul/ol) y el
+     * formato de número (decimal, letras, romanos) de cada nivel.
+     */
+    private function readNumberingFormats(): array
+    {
+        $map = [];
+        if ($this->zip === null) {
+            return $map;
+        }
+
+        $xml = $this->zip->getFromName('word/numbering.xml');
+        if ($xml === false) {
+            return $map;
+        }
+
+        $abstracts = [];
+        if (preg_match_all(
+            '/<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>(.*?)<\/w:abstractNum>/s',
+            $xml,
+            $matches,
+            PREG_SET_ORDER,
+        )) {
+            foreach ($matches as $abstract) {
+                $id = (int) $abstract[1];
+                $levels = [];
+                if (preg_match_all(
+                    '/<w:lvl\b[^>]*w:ilvl="(\d+)"[^>]*>(.*?)<\/w:lvl>/s',
+                    $abstract[2],
+                    $levelMatches,
+                    PREG_SET_ORDER,
+                )) {
+                    foreach ($levelMatches as $levelMatch) {
+                        $levels[(int) $levelMatch[1]] = $this->listLevelStyle($levelMatch[2]);
+                    }
+                }
+                $abstracts[$id] = $levels;
+            }
+        }
+
+        if (preg_match_all(
+            '/<w:num\b[^>]*w:numId="(\d+)"[^>]*>(.*?)<\/w:num>/s',
+            $xml,
+            $numMatches,
+            PREG_SET_ORDER,
+        )) {
+            foreach ($numMatches as $numMatch) {
+                $numId = (int) $numMatch[1];
+                $levels = $abstracts[(int) ($this->regexFirst('/<w:abstractNumId\b[^>]*w:val="(\d+)"/', $numMatch[2]) ?? 0)] ?? [];
+
+                foreach ($this->regexAll('/<w:lvlOverride\b[^>]*w:ilvl="(\d+)"[^>]*>\s*(?:<[^>]*>\s*)*<w:startOverride\b[^>]*w:val="(\d+)"/', $numMatch[2]) as $override) {
+                    $level = (int) $override[1];
+                    $levels[$level]['start'] = (int) $override[2];
+                }
+
+                $map[$numId] = $levels;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Estilo de un nivel concreto (w:lvl) de una lista.
+     */
+    private function listLevelStyle(string $levelXml): array
+    {
+        $start = 1;
+        if (preg_match('/<w:start\b[^>]*w:val="(\d+)"/', $levelXml, $match) === 1) {
+            $start = (int) $match[1];
+        }
+
+        $fmt = '';
+        if (preg_match('/<w:numFmt\b[^>]*w:val="([^"]+)"/', $levelXml, $match) === 1) {
+            $fmt = strtolower($match[1]);
+        }
+
+        return [
+            'start' => $start,
+            'fmt' => $this->numFmtToTag($fmt),
+            'type' => $this->numFmtToType($fmt),
+        ];
+    }
+
+    /**
+     * numFmt del nivel → etiqueta HTML.
+     */
+    private function numFmtToTag(string $fmt): string
+    {
+        if ($fmt === '' || $fmt === 'bullet' || $fmt === 'none') {
+            return 'ul';
+        }
+
+        return 'ol';
+    }
+
+    /**
+     * numFmt del nivel → atributo type del <ol> (letras/romanos).
+     */
+    private function numFmtToType(string $fmt): ?string
+    {
+        return match ($fmt) {
+            'lowerletter' => 'a',
+            'upperletter' => 'A',
+            'lowerroman' => 'i',
+            'upperroman' => 'I',
+            default => null,
+        };
+    }
+
+    private function regexFirst(string $pattern, string $subject): ?string
+    {
+        if (preg_match($pattern, $subject, $match) === 1) {
+            return $match[1];
+        }
+
+        return null;
+    }
+
+    private function regexAll(string $pattern, string $subject): array
+    {
+        if (preg_match_all($pattern, $subject, $matches, PREG_SET_ORDER)) {
+            return $matches;
+        }
+
+        return [];
     }
 
     private function writeImageElement(Image $image): string
@@ -425,14 +696,12 @@ private function writeTable(Table $table): string
         // Saltos de línea dentro de un párrafo → <br> (nodo hardBreak).
         $text = preg_replace('/\r?\n/', '<br>', $text) ?? $text;
 
-        // Tabulaciones → span con ancho para conservarlas visualmente.
-        $text = preg_replace_callback(
-            '/\t+/',
-            static fn (array $matches): string => '<span class="word-tab" style="min-width:2.5em"></span>',
-            $text,
-        ) ?? $text;
+        // Las tabulaciones se conservan como carácter de tabulación literal:
+        // el editor se configura con preserveWhitespace 'full' + white-space
+        // pre-wrap, así Tab/espacios no colapsan al parsear ni al pintar.
 
-        // Espacios múltiples consecutivos → &nbsp; para que no colapsen.
+        // Espacios múltiples consecutivos → &nbsp; para que no colapsen en
+        // contextos que no preservan espacios (p. ej. la vista de PDF).
         $text = preg_replace_callback(
             '/ {2,}/',
             static fn (array $matches): string => str_replace(' ', '&nbsp;', $matches[0]),

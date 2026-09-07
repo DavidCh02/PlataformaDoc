@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\FileController;
@@ -58,6 +59,8 @@ Route::middleware(['auth', 'verified', 'permission:users.manage'])->prefix('admi
     Route::patch('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
     Route::patch('/users/{user}/role', [AdminUserController::class, 'updateRole'])->name('users.update-role');
     Route::patch('/users/{user}/permissions', [AdminUserController::class, 'syncPermissions'])->name('users.sync-permissions');
+    Route::get('/permissions', [PermissionController::class, 'index'])->name('permissions.index');
+    Route::patch('/permissions', [PermissionController::class, 'update'])->name('permissions.update');
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
 });
 

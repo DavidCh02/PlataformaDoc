@@ -12,20 +12,23 @@ const showingNavigationDropdown = ref(false);
 
 <template>
     <div>
-        <div class="min-h-screen bg-gray-100">
+        <div class="min-h-screen bg-slate-100">
             <nav
-                class="border-b border-gray-100 bg-white"
+                class="sticky top-0 z-40 border-b border-slate-200/70 bg-gradient-to-r from-white via-slate-50 to-white/90 shadow-sm backdrop-blur"
             >
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div class="flex h-16 justify-between">
-                        <div class="flex">
+                        <div class="flex items-center gap-6">
                             <!-- Logo -->
-                            <div class="flex shrink-0 items-center">
+                            <div class="flex shrink-0 items-center gap-2">
                                 <Link :href="route('dashboard')">
                                     <ApplicationLogo
-                                        class="block h-9 w-auto fill-current text-gray-800"
+                                        class="block h-9 w-auto fill-current text-sky-700"
                                     />
+                                </Link>
+                                <Link :href="route('dashboard')" class="hidden text-lg font-bold tracking-tight text-slate-900 sm:block">
+                                    Plataforma<span class="text-sky-600">Doc</span>
                                 </Link>
                             </div>
 
@@ -46,6 +49,13 @@ const showingNavigationDropdown = ref(false);
                                 >
                                     Administración
                                 </NavLink>
+                                <NavLink
+                                    v-if="$page.props.auth.can.includes('users.manage')"
+                                    :href="route('admin.permissions.index')"
+                                    :active="route().current('admin.permissions.*')"
+                                >
+                                    Permisos
+                                </NavLink>
                             </div>
                         </div>
 
@@ -57,7 +67,7 @@ const showingNavigationDropdown = ref(false);
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                                                class="inline-flex items-center rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium leading-4 text-slate-600 shadow-sm transition duration-150 ease-in-out hover:border-sky-300 hover:text-slate-900"
                                             >
                                                 {{ $page.props.auth.user.name }}
 
@@ -81,14 +91,14 @@ const showingNavigationDropdown = ref(false);
                                         <DropdownLink
                                             :href="route('profile.edit')"
                                         >
-                                            Profile
+                                            Mi perfil
                                         </DropdownLink>
                                         <DropdownLink
                                             :href="route('logout')"
                                             method="post"
                                             as="button"
                                         >
-                                            Log Out
+                                            Cerrar sesión
                                         </DropdownLink>
                                     </template>
                                 </Dropdown>
@@ -151,7 +161,7 @@ const showingNavigationDropdown = ref(false);
                             :href="route('dashboard')"
                             :active="route().current('dashboard')"
                         >
-                            Dashboard
+                            Explorador
                         </ResponsiveNavLink>
                         <ResponsiveNavLink
                             v-if="$page.props.auth.can.includes('users.manage')"
@@ -159,6 +169,13 @@ const showingNavigationDropdown = ref(false);
                             :active="route().current('admin.users.*') || route().current('admin.audit-logs.*')"
                         >
                             Administración
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="$page.props.auth.can.includes('users.manage')"
+                            :href="route('admin.permissions.index')"
+                            :active="route().current('admin.permissions.*')"
+                        >
+                            Permisos
                         </ResponsiveNavLink>
                     </div>
 
@@ -179,14 +196,14 @@ const showingNavigationDropdown = ref(false);
 
                         <div class="mt-3 space-y-1">
                             <ResponsiveNavLink :href="route('profile.edit')">
-                                Profile
+                                Mi perfil
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
                                 :href="route('logout')"
                                 method="post"
                                 as="button"
                             >
-                                Log Out
+                                Cerrar sesión
                             </ResponsiveNavLink>
                         </div>
                     </div>
@@ -195,7 +212,7 @@ const showingNavigationDropdown = ref(false);
 
             <!-- Page Heading -->
             <header
-                class="bg-white shadow"
+                class="border-b border-slate-200/70 bg-white/70 shadow-sm backdrop-blur"
                 v-if="$slots.header"
             >
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

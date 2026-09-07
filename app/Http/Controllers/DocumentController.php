@@ -17,6 +17,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -49,18 +50,26 @@ class DocumentController extends Controller
     {
         $this->authorize('view', $document);
 
+        $siblings = Document::query()
+            ->where('folder_id', $document->folder_id)
+            ->orderBy('title')
+            ->get(['id', 'title', 'folder_id']);
+
         return Inertia::render('Editor', [
             'document' => $document,
             'canEdit' => request()->user()->can('docs.edit_realtime'),
+            'siblings' => $siblings,
         ]);
     }
 
     public function update(UpdateDocumentRequest $request, Document $document): JsonResponse
     {
         $this->authorize('update', $document);
+        $userId = $request->user()->id;
         $document->update(array_merge($request->validated(), [
-            'updated_by_id' => $request->user()->id,
+            'updated_by_id' => $userId,
         ]));
+        $this->markFirstEdit($document, $userId);
 
         return response()->json([
             'saved' => true,
@@ -78,6 +87,7 @@ class DocumentController extends Controller
                 'content' => $content,
                 'updated_by_id' => $request->user()->id,
             ]);
+            $this->markFirstEdit($document, $request->user()->id);
         }
 
         event(new DocumentUpdated(
@@ -104,6 +114,7 @@ class DocumentController extends Controller
                 'content' => $content,
                 'folder_id' => $request->validated('folder_id'),
                 'user_id' => $request->user()->id,
+                'imported_from' => $uploadedFile->getClientOriginalName(),
             ]);
 
             if ($request->expectsJson()) {
@@ -129,19 +140,70 @@ class DocumentController extends Controller
         $this->authorize('view', $file);
         abort_unless(request()->user()->can('docs.edit_realtime'), 403);
 
-        $document = DB::transaction(function () use ($file, $importer) {
+        try {
+            $document = DB::transaction(function () use ($file, $importer) {
             $lockedFile = File::query()->with('document')->lockForUpdate()->findOrFail($file->id);
 
-            if ($lockedFile->document_id && $lockedFile->document) return $lockedFile->document;
+            if ($lockedFile->document_id && $lockedFile->document) {
+                $existing = $lockedFile->document;
+                $existingContent = (string) $existing->content;
+
+                if (! str_contains($existingContent, 'pdoc-editor-version:4')
+                    && (str_contains($existingContent, 'pdoc-editor-version:2')
+                        || str_contains($existingContent, 'pdoc-editor-version:3')
+                        || str_contains($existingContent, 'class="word-tab"'))) {
+                    $sourcePath = \Illuminate\Support\Facades\Storage::disk(config('filesystems.default'))->path($lockedFile->storage_path);
+                    $content = $importer->toHtml($sourcePath, pathinfo($lockedFile->original_name, PATHINFO_EXTENSION));
+                    $existing->forceFill([
+                        'content' => $content,
+                        'imported_from' => $existing->imported_from ?? $lockedFile->original_name,
+                        'updated_by_id' => request()->user()->id,
+                    ])->save();
+                }
+
+                return $existing;
+            }
+
+            // Reutilizar documento huérfano con el mismo nombre en la misma carpeta:
+            // evita que "archivo.doc" + un documento sin enlazar del mismo nombre
+            // aparezcan como dos filas duplicadas en el explorador.
+            $orphanDocument = Document::query()
+                ->where('title', pathinfo($lockedFile->original_name, PATHINFO_FILENAME))
+                ->where(fn ($query) => $query->whereNull('folder_id')->orWhere('folder_id', $lockedFile->folder_id))
+                ->whereDoesntHave('files')
+                ->orderBy('id')
+                ->first();
+
+            if ($orphanDocument) {
+                $orphanDocument->forceFill([
+                    'imported_from' => $orphanDocument->imported_from ?? $lockedFile->original_name,
+                    'updated_by_id' => request()->user()->id,
+                ])->save();
+                $lockedFile->update([
+                    'document_id' => $orphanDocument->id,
+                    'updated_by_id' => request()->user()->id,
+                ]);
+
+                return $orphanDocument;
+            }
 
             $disk = config('filesystems.default');
             $sourcePath = \Illuminate\Support\Facades\Storage::disk($disk)->path($lockedFile->storage_path);
-            $content = $importer->toHtml($sourcePath, pathinfo($lockedFile->original_name, PATHINFO_EXTENSION));
+            $extension = strtolower(pathinfo($lockedFile->original_name, PATHINFO_EXTENSION));
+
+            if ($extension === 'doc') {
+                throw new RuntimeException(
+                    'Los archivos .doc no se pueden editar directamente. Abre el archivo en Word y usa "Guardar como" → .docx.'
+                );
+            }
+
+            $content = $importer->toHtml($sourcePath, $extension);
             $document = Document::create([
                 'title' => pathinfo($lockedFile->original_name, PATHINFO_FILENAME),
                 'content' => $content,
                 'folder_id' => $lockedFile->folder_id,
                 'user_id' => request()->user()->id,
+                'imported_from' => $lockedFile->original_name,
             ]);
             $lockedFile->update([
                 'document_id' => $document->id,
@@ -149,9 +211,21 @@ class DocumentController extends Controller
             ]);
 
             return $document;
-        });
+            });
 
-        return redirect()->route('documents.edit', $document);
+            return redirect()->route('documents.edit', $document);
+        } catch (Throwable $exception) {
+            Log::error('Word document conversion failed on edit.', [
+                'file_id' => $file->id,
+                'original_name' => $file->original_name,
+                'error' => $exception->getMessage(),
+                'previous' => $exception->getPrevious()?->getMessage(),
+            ]);
+
+            return back()->withErrors([
+                'file' => 'No se pudo preparar este documento para editar. Usa la vista previa para conservar el diseño original.',
+            ]);
+        }
     }
 
     public function destroy(Document $document): RedirectResponse
@@ -234,6 +308,20 @@ class DocumentController extends Controller
             ]);
 
             return back()->withErrors(['export' => 'No se pudo generar el archivo Word.']);
+        }
+    }
+
+    /**
+     * Marca la primera edición real para ocultar el aviso de conversión
+     * en futuras aperturas.
+     */
+    private function markFirstEdit(Document $document, ?int $userId): void
+    {
+        if ($document->isImportedFromWord() && $document->first_edited_at === null) {
+            $document->forceFill([
+                'first_edited_at' => now(),
+                'updated_by_id' => $userId,
+            ])->save();
         }
     }
 }

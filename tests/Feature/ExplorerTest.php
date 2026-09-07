@@ -15,6 +15,7 @@ use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
+use Inertia\Testing\AssertableInertia as Assert;
 
 class ExplorerTest extends TestCase
 {
@@ -126,6 +127,72 @@ class ExplorerTest extends TestCase
         $this->assertStringNotContainsString('<body>', Document::query()->latest('id')->value('content'));
     }
 
+    public function test_an_imported_document_exposes_the_import_flags_for_the_first_edit_warning(): void
+    {
+        $user = $this->userWithPermissions(['files.view', 'docs.edit_realtime']);
+        $document = Document::create([
+            'title' => 'Informe clínico',
+            'content' => '<p>Contenido</p>',
+            'user_id' => $user->id,
+            'imported_from' => 'informe.docx',
+            'first_edited_at' => null,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Explorer')
+            ->has('documents', 1)
+            ->where('documents.0.imported_from', 'informe.docx')
+            ->where('documents.0.first_edited_at', null));
+    }
+
+    public function test_the_import_flags_prevent_the_warning_after_the_first_save(): void
+    {
+        $user = $this->userWithPermissions(['files.view', 'docs.edit_realtime']);
+        $document = Document::create([
+            'title' => 'Informe clínico',
+            'content' => '<p>Contenido</p>',
+            'user_id' => $user->id,
+            'imported_from' => 'informe.docx',
+            'first_edited_at' => null,
+        ]);
+
+        $this->actingAs($user)->patch(route('documents.update', $document), [
+            'title' => 'Informe clínico',
+            'content' => '<p>Contenido actualizado</p>',
+        ])->assertOk();
+
+        $document->refresh();
+        $this->assertNotNull($document->first_edited_at);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Explorer')
+            ->has('documents', 1)
+            ->where('documents.0.imported_from', 'informe.docx')
+            ->where('documents.0.first_edited_at', $document->first_edited_at->toJSON()));
+    }
+
+    public function test_a_blank_document_exposes_no_import_flags(): void
+    {
+        $user = $this->userWithPermissions(['files.view', 'docs.edit_realtime']);
+        $document = Document::create([
+            'title' => 'Documento nuevo',
+            'content' => '<p></p>',
+            'user_id' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Explorer')
+            ->has('documents', 1)
+            ->where('documents.0.imported_from', null)
+            ->where('documents.0.first_edited_at', null));
+    }
+
     public function test_a_yjs_delta_is_broadcast_for_an_editable_document(): void
     {
         Event::fake();
@@ -201,6 +268,84 @@ class ExplorerTest extends TestCase
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     }
 
+    public function test_a_file_with_a_linked_document_shows_as_a_single_document_row(): void
+    {
+        $user = $this->userWithPermissions(['files.view']);
+        $document = Document::create([
+            'title' => 'informe',
+            'content' => '<p>Contenido editable</p>',
+            'user_id' => $user->id,
+        ]);
+        File::create([
+            'name' => 'informe',
+            'original_name' => 'informe.docx',
+            'mime_type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'storage_path' => 'files/'.$user->id.'/informe.docx',
+            'file_size' => 100,
+            'user_id' => $user->id,
+            'document_id' => $document->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Explorer')
+            ->has('documents', 1)
+            ->has('files', 0)
+            ->where('documents.0.id', $document->id)
+            ->where('documents.0.linked_file.original_name', 'informe.docx'));
+    }
+
+    public function test_editing_a_dot_doc_with_an_orphan_document_reuses_it_instead_of_duplicating(): void
+    {
+        $user = $this->userWithPermissions(['files.view', 'docs.edit_realtime']);
+        $document = Document::create([
+            'title' => 'informe',
+            'content' => '<p>Huérfano previo</p>',
+            'user_id' => $user->id,
+        ]);
+        $file = File::create([
+            'name' => 'informe',
+            'original_name' => 'informe.doc',
+            'mime_type' => 'application/msword',
+            'storage_path' => 'files/'.$user->id.'/informe.doc',
+            'file_size' => 100,
+            'user_id' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('files.edit', $file));
+
+        $response->assertRedirect();
+        $this->assertDatabaseCount('documents', 1);
+        $this->assertDatabaseHas('files', [
+            'id' => $file->id,
+            'document_id' => $document->id,
+        ]);
+    }
+
+    public function test_the_editor_page_lists_sibling_documents_for_navigation(): void
+    {
+        $user = $this->userWithPermissions(['files.view']);
+        $folder = Folder::create(['name' => 'Caso 2', 'user_id' => $user->id]);
+        $alpha = Document::create(['title' => 'Alpha', 'content' => '<p>1</p>', 'folder_id' => $folder->id, 'user_id' => $user->id]);
+        $beta = Document::create(['title' => 'Beta', 'content' => '<p>2</p>', 'folder_id' => $folder->id, 'user_id' => $user->id]);
+        $gamma = Document::create(['title' => 'Gamma', 'content' => '<p>3</p>', 'folder_id' => $folder->id, 'user_id' => $user->id]);
+        $otherFolder = Folder::create(['name' => 'Otra', 'user_id' => $user->id]);
+        Document::create(['title' => 'Fuera de la carpeta', 'content' => '<p>X</p>', 'folder_id' => $otherFolder->id, 'user_id' => $user->id]);
+
+        $response = $this->actingAs($user)->get(route('documents.edit', $beta));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Editor')
+            ->where('document.id', $beta->id)
+            ->has('siblings', 3)
+            ->where('siblings.0.id', $alpha->id)
+            ->where('siblings.1.id', $beta->id)
+            ->where('siblings.2.id', $gamma->id));
+    }
+
     private function userWithPermissions(array $permissions): User
     {
         $user = User::factory()->create();
@@ -228,3 +373,4 @@ class ExplorerTest extends TestCase
         ];
     }
 }
+

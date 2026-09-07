@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use PhpOffice\PhpWord\IOFactory;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use ZipArchive;
 
@@ -28,6 +29,19 @@ class WordDocumentImporter
             if (isset($sanitizedPath) && $sanitizedPath !== $sourcePath) {
                 @unlink($sanitizedPath);
             }
+
+            Log::error('DOCX conversion failed.', [
+                'source' => basename((string) $sourcePath),
+                'error' => $exception->getMessage(),
+                'previous' => $exception->getPrevious()?->getMessage(),
+                'extensions' => [
+                    'zip' => extension_loaded('zip') ? 'yes' : 'no',
+                    'dom' => extension_loaded('dom') ? 'yes' : 'no',
+                    'simplexml' => extension_loaded('simplexml') ? 'yes' : 'no',
+                    'xml' => extension_loaded('xml') ? 'yes' : 'no',
+                    'gd' => extension_loaded('gd') ? 'yes' : 'no',
+                ],
+            ]);
 
             throw new RuntimeException(
                 'No se pudo preparar una versión editable. Usa la vista previa para conservar el diseño original.',

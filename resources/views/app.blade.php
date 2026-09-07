@@ -6,6 +6,9 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml" />
+        <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any" />
+        <meta name="theme-color" content="#4f46e5" />
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

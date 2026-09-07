@@ -47,6 +47,27 @@ class FolderController extends Controller
             $folders = $folderQuery->latest()->get();
             $files = $fileQuery->latest()->get();
             $documents = $documentQuery->latest()->get();
+
+            // Evitar filas duplicadas: un archivo con documento editable enlazado
+            // se muestra una sola vez como documento (conservando el original para
+            // descarga) en lugar de aparecer como "archivo.doc" y "documento".
+            $linkedFileIds = collect();
+            $documents->each(function (Document $document) use ($files, $linkedFileIds) {
+                $source = $files->firstWhere('document_id', $document->id);
+                if (! $source) {
+                    return;
+                }
+
+                $linkedFileIds->push($source->id);
+                $document->setAttribute('linked_file', [
+                    'id' => $source->id,
+                    'original_name' => $source->original_name,
+                    'mime_type' => $source->mime_type,
+                    'file_size' => $source->file_size,
+                ]);
+            });
+
+            $files = $files->reject(fn (File $file) => $linkedFileIds->contains($file->id));
         }
 
         return Inertia::render('Explorer', [

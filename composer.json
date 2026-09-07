@@ -81,6 +81,20 @@
     "extra": {
         "laravel": {
             "dont-discover": []
+        },
+        "heroku": {
+            "php": {
+                "extensions": [
+                    "zip",
+                    "dom",
+                    "simplexml",
+                    "xml",
+                    "xmlreader",
+                    "xmlwriter",
+                    "libxml",
+                    "gd"
+                ]
+            }
         }
     },
     "config": {

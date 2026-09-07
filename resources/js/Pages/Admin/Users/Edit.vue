@@ -19,16 +19,21 @@ const userForm = useForm({
     permissions: [...initials],
 });
 
-// Al cambiar el rol a mano, recargar los permisos por defecto de ese rol.
-// Se ignora el primer disparo (montaje) para no pisar los permisos actuales.
+// Al cambiar el rol a mano, recargar los permisos por defecto de ese rol pero
+// conservando los permisos directos ya marcados (los que no eran por defecto
+// del rol anterior). Se ignora el primer disparo (montaje).
 let isFirstRoleRender = true;
+let lastRole = userForm.role;
 watch(() => userForm.role, (role) => {
     if (isFirstRoleRender) {
         isFirstRoleRender = false;
         return;
     }
 
-    userForm.permissions = [...(props.rolePermissions[role] || [])];
+    const oldDefaults = props.rolePermissions[lastRole] || [];
+    const extras = userForm.permissions.filter((name) => !oldDefaults.includes(name));
+    userForm.permissions = [...new Set([...(props.rolePermissions[role] || []), ...extras])];
+    lastRole = role;
 });
 
 const defaultPermissionsForRole = computed(
@@ -75,8 +80,8 @@ const permissionLabel = (name) => name.replace(/\./g, ' · ');
             <section class="rounded-lg border border-slate-200 bg-white p-6">
                 <h3 class="text-lg font-semibold text-slate-900">Rol y permisos</h3>
                 <p class="mt-1 text-sm text-slate-500">
-                    Elige un rol para precargar sus permisos por defecto y ajústalos con los checkboxes.
-                    Los cambios se guardan juntos con un solo clic.
+                    Elige un rol para precargar sus permisos por defecto y añade o quita otros con los checkboxes.
+                    Desmarcar un permiso lo desactiva solo para este usuario, aunque el rol lo incluya.
                 </p>
 
                 <label for="role" class="mt-4 block text-sm font-medium text-slate-700">Rol</label>

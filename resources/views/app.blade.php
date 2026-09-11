@@ -4,6 +4,11 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        {{-- Config de Reverb en tiempo de ejecución (no depende del build de Vite) --}}
+        <meta name="reverb-key" content="{{ env('VITE_REVERB_APP_KEY', env('REVERB_APP_KEY', '')) }}">
+        <meta name="reverb-host" content="{{ env('VITE_REVERB_HOST', env('REVERB_HOST', '')) }}">
+        <meta name="reverb-port" content="{{ env('VITE_REVERB_PORT', env('REVERB_PORT', '')) }}">
+        <meta name="reverb-scheme" content="{{ env('VITE_REVERB_SCHEME', env('REVERB_SCHEME', 'https')) }}">
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
         <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml" />

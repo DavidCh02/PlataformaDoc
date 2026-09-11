@@ -16,6 +16,15 @@
 
         <!-- Scripts -->
         @routes
+        @php($ziggyUrl = rtrim((string) url('/'), '/'))
+        <script>
+            // Ziggy genera las URLs con APP_URL. Lo alineamos al host real de la petición
+            // (p. ej. 127.0.0.1:8000 o localhost:8000) para evitar peticiones cross-origin
+            // que el navegador bloquea por CORS.
+            if (typeof Ziggy !== 'undefined' && Ziggy.url !== @json($ziggyUrl)) {
+                Ziggy.url = @json($ziggyUrl);
+            }
+        </script>
         @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
         @inertiaHead
     </head>

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DocumentVersion;
 use App\Models\File;
 use App\Models\Folder;
 use App\Models\Document;
@@ -344,6 +345,122 @@ class ExplorerTest extends TestCase
             ->where('siblings.0.id', $alpha->id)
             ->where('siblings.1.id', $beta->id)
             ->where('siblings.2.id', $gamma->id));
+    }
+
+    public function test_the_explorer_state_releases_expired_locks(): void
+    {
+        $user = $this->userWithPermissions(['files.view']);
+        $document = Document::create([
+            'title' => 'Lock viejo',
+            'content' => '<p></p>',
+            'user_id' => $user->id,
+            'is_locked' => true,
+            'locked_by_id' => $user->id,
+            'locked_at' => now()->subHours(3),
+        ]);
+
+        $response = $this->actingAs($user)->getJson(route('explorer.state'));
+
+        $response->assertOk()->assertJsonPath('documents.0.is_locked', false);
+        $this->assertDatabaseHas('documents', [
+            'id' => $document->id,
+            'is_locked' => false,
+            'locked_by_id' => null,
+        ]);
+    }
+
+    public function test_only_the_owner_or_an_editor_can_force_unlock_a_document(): void
+    {
+        $owner = $this->userWithPermissions(['files.view']);
+        $editor = $this->userWithPermissions(['files.view', 'docs.edit_realtime']);
+        $viewer = $this->userWithPermissions(['files.view']);
+        $document = Document::create([
+            'title' => 'Atascado',
+            'content' => '<p></p>',
+            'user_id' => $owner->id,
+            'is_locked' => true,
+            'locked_by_id' => $owner->id,
+            'locked_at' => now(),
+        ]);
+
+        // Un lector simple (ni titular ni admin) no puede liberar el bloqueo.
+        $this->actingAs($viewer)->post(route('documents.unlock', $document))->assertForbidden();
+
+        // Un editor con permiso docs.edit_realtime sí.
+        $this->actingAs($editor)->post(route('documents.unlock', $document))->assertRedirect();
+        $this->assertDatabaseHas('documents', ['id' => $document->id, 'is_locked' => false]);
+
+        // El titular del lock también puede liberar el suyo.
+        $relocked = Document::query()->findOrFail($document->id);
+        $relocked->forceFill(['is_locked' => true, 'locked_by_id' => $owner->id, 'locked_at' => now()])->saveQuietly();
+        $this->actingAs($owner)->post(route('documents.unlock', $document))->assertRedirect();
+        $this->assertDatabaseHas('documents', ['id' => $document->id, 'is_locked' => false]);
+    }
+
+    public function test_importing_a_word_file_keeps_the_original_binary_for_faithful_editing(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.default' => 'local']);
+        $user = $this->userWithPermissions(['docs.create']);
+        $phpWord = new PhpWord();
+        $phpWord->addSection()->addText('Contenido importado');
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'docx_').'.docx';
+        IOFactory::createWriter($phpWord, 'Word2007')->save($temporaryPath);
+        $bytes = file_get_contents($temporaryPath);
+
+        $response = $this->actingAs($user)->post(route('documents.import-word'), [
+            'file' => UploadedFile::fake()->createWithContent('informe.docx', $bytes),
+        ]);
+
+        @unlink($temporaryPath);
+        $response->assertRedirect();
+        $document = Document::query()->latest('id')->firstOrFail();
+        $v1 = DocumentVersion::query()->where('document_id', $document->id)->firstOrFail();
+
+        $this->assertSame('v1', $v1->version_number);
+        $this->assertSame($v1->id, $document->current_version_id);
+        $this->assertDatabaseHas('files', [
+            'document_id' => $document->id,
+            'original_name' => 'informe.docx',
+        ]);
+        Storage::disk('local')->assertExists($v1->file_path);
+        $this->assertSame($bytes, Storage::disk('local')->get($v1->file_path));
+    }
+
+    public function test_export_docx_serves_the_saved_binary_instead_of_regenerating(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.default' => 'local']);
+        $user = $this->userWithPermissions(['files.view']);
+        $phpWord = new PhpWord();
+        $phpWord->addSection()->addText('Contenido original');
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'docx_exp_').'.docx';
+        IOFactory::createWriter($phpWord, 'Word2007')->save($temporaryPath);
+        $bytes = file_get_contents($temporaryPath);
+        @unlink($temporaryPath);
+
+        $storagePath = 'documents/99/versions/v1.docx';
+        Storage::disk('local')->put($storagePath, $bytes);
+        $document = Document::create([
+            'title' => 'Informe',
+            'content' => '<p>Contenido totalmente distinto del editor</p>',
+            'user_id' => $user->id,
+        ]);
+        $version = DocumentVersion::create([
+            'document_id' => $document->id,
+            'user_id' => $user->id,
+            'file_path' => $storagePath,
+            'file_size' => strlen($bytes),
+            'version_number' => 'v1',
+            'change_summary' => 'v1',
+        ]);
+        $document->forceFill(['current_version_id' => $version->id])->saveQuietly();
+
+        $response = $this->actingAs($user)->get(route('documents.export-docx', $document));
+
+        $response->assertOk();
+        $downloaded = $response->baseResponse->getFile()->getPathname();
+        $this->assertSame($bytes, file_get_contents($downloaded));
     }
 
     private function userWithPermissions(array $permissions): User

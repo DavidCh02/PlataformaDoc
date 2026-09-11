@@ -10,7 +10,21 @@ class SyncDocumentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('docs.edit_realtime') ?? false;
+        $user = $this->user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->can('docs.edit_realtime')) {
+            return true;
+        }
+
+        $documentId = $this->route('document');
+        if ($documentId) {
+            return \App\Models\Document::where('id', $documentId)->where('user_id', $user->id)->exists();
+        }
+
+        return false;
     }
 
     /**

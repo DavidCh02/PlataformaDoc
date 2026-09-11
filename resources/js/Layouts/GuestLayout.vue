@@ -1,10 +1,11 @@
 <script setup>
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import ThemeToggle from '@/Components/ThemeToggle.vue';
 import { Link } from '@inertiajs/vue3';
 </script>
 
 <template>
-    <div class="flex min-h-screen bg-slate-50">
+    <div class="flex min-h-screen bg-slate-50 dark:bg-[#0b1424]">
         <!-- Left branding panel -->
         <div
             class="relative hidden w-1/2 items-center justify-center overflow-hidden bg-gradient-to-br from-indigo-700 via-indigo-800 to-slate-900 lg:flex"
@@ -58,7 +59,10 @@ import { Link } from '@inertiajs/vue3';
         </div>
 
         <!-- Right form panel -->
-        <div class="flex w-full flex-col items-center justify-center px-4 py-12 sm:px-6 lg:w-1/2">
+        <div class="relative flex w-full flex-col items-center justify-center px-4 py-12 sm:px-6 lg:w-1/2">
+            <div class="absolute right-5 top-5 sm:right-8 sm:top-8">
+                <ThemeToggle />
+            </div>
             <div class="mb-8 flex flex-col items-center">
                 <Link href="/" class="mb-6 lg:hidden">
                     <ApplicationLogo class="h-14 w-14 text-indigo-600" />
@@ -66,7 +70,7 @@ import { Link } from '@inertiajs/vue3';
             </div>
 
             <div class="w-full max-w-md">
-                <div class="bg-white px-8 py-8 shadow-xl ring-1 ring-slate-200 sm:rounded-2xl">
+                <div class="bg-white px-8 py-8 shadow-xl ring-1 ring-slate-200 sm:rounded-2xl dark:bg-slate-800 dark:ring-slate-700">
                     <slot />
                 </div>
             </div>

@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PlataformaDoc · Add-in de Word</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        :root {
+            --bg: #eef2f7;
+            --bg-gradient: linear-gradient(180deg, #f7fafc 0%, #e9eef5 100%);
+            --surface: #ffffff;
+            --surface-2: #f8fafc;
+            --border: #e2e8f0;
+            --border-strong: #cbd5e1;
+            --text: #0f172a;
+            --text-2: #334155;
+            --muted: #64748b;
+            --muted-2: #94a3b8;
+            --accent-from: #0ea5e9;
+            --accent-to: #2563eb;
+            --accent-text: #0369a1;
+            --accent-soft: #e0f2fe;
+            --success: #047857;
+            --success-bg: #ecfdf5;
+            --warn: #b45309;
+            --warn-bg: #fffbeb;
+            --err: #dc2626;
+            --err-bg: #fef2f2;
+            --shadow-sm: 0 1px 2px rgb(15 23 42 / 6%);
+            --shadow: 0 4px 14px rgb(15 23 42 / 9%);
+            --shadow-lg: 0 12px 30px rgb(15 23 42 / 15%);
+        }
+        [data-theme="dark"] {
+            --bg: #0b1424;
+            --bg-gradient: linear-gradient(180deg, #101d33 0%, #0b1424 100%);
+            --surface: #16233b;
+            --surface-2: #122036;
+            --border: #243450;
+            --border-strong: #33476b;
+            --text: #f1f5f9;
+            --text-2: #cbd5e1;
+            --muted: #94a3b8;
+            --muted-2: #64748b;
+            --accent-text: #7dd3fc;
+            --accent-soft: #0e2942;
+            --success: #34d399;
+            --success-bg: #06311f;
+            --warn: #fbbf24;
+            --warn-bg: #36280c;
+            --err: #f87171;
+            --err-bg: #3b0f0f;
+            --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+            --shadow: 0 4px 14px rgb(0 0 0 / 45%);
+            --shadow-lg: 0 12px 30px rgb(0 0 0 / 55%);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text);
+            font-size: 14px;
+            padding: 12px;
+        }
+        .hidden { display: none !important; }
+        h2 { font-size: 15px; margin: 0 0 8px; }
+        p { margin: 4px 0; }
+        .muted { color: var(--muted); }
+        .small { font-size: 12px; }
+        .req { color: var(--err); }
+
+        .app-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 10px; margin-bottom: 6px;
+        }
+        .app-title {
+            display: flex; align-items: center; gap: 8px;
+            font-weight: 700; font-size: 14px; color: var(--text);
+        }
+        .app-logo {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; border-radius: 8px;
+            background: linear-gradient(120deg, var(--accent-from), var(--accent-to));
+            color: #fff; font-size: 12px; font-weight: 800;
+            box-shadow: 0 3px 8px rgb(37 99 235 / 30%);
+        }
+        .app-sub { font-size: 11px; color: var(--muted); font-weight: 500; }
+        .theme-toggle {
+            border: 1px solid var(--border);
+            background: var(--surface); color: var(--text);
+            border-radius: 999px; width: 32px; height: 32px; font-size: 15px;
+            cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+            box-shadow: var(--shadow-sm);
+            transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+        }
+        .theme-toggle:hover { border-color: var(--accent-to); box-shadow: var(--shadow); transform: translateY(-1px); }
+
+        .status {
+            display: none; border-radius: 10px; padding: 10px 12px;
+            font-size: 13px; margin-bottom: 12px; line-height: 1.45;
+            box-shadow: var(--shadow-sm); border: 1px solid transparent;
+        }
+        .status.show { display: block; }
+        .alert-ok { background: var(--success-bg); color: var(--success); border-color: var(--border); }
+        .alert-err { background: var(--err-bg); color: var(--err); border-color: var(--border); }
+        .alert-info { background: var(--warn-bg); color: var(--warn); border-color: var(--border); }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 16px; margin: 12px 0;
+            box-shadow: var(--shadow);
+        }
+        .card-head {
+            display: flex; align-items: center;
+            justify-content: space-between; gap: 8px; margin-bottom: 8px;
+        }
+        .card-head-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+        label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: var(--muted); margin: 10px 0 4px;
+        }
+        input[type="email"], input[type="password"], textarea {
+            width: 100%; padding: 9px 11px; border: 1px solid var(--border);
+            border-radius: 10px; font-size: 14px; font-family: inherit; background: var(--surface);
+            color: var(--text); box-shadow: var(--shadow-sm);
+            transition: border-color 120ms ease, box-shadow 120ms ease;
+        }
+        input[type="email"]:focus, input[type="password"]:focus, textarea:focus {
+            outline: none; border-color: var(--accent-to);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+        textarea { resize: vertical; }
+
+        .btn {
+            border: 0; border-radius: 10px; padding: 10px 14px; font-size: 13px;
+            font-weight: 600; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            transition: box-shadow 120ms ease, transform 120ms ease, filter 120ms ease, border-color 120ms ease;
+        }
+        .btn:hover { transform: translateY(-1px); filter: brightness(1.03); box-shadow: var(--shadow); }
+        .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; filter: none; box-shadow: none; }
+        .btn-block { width: 100%; margin-top: 10px; }
+        .btn-primary { background: linear-gradient(120deg, var(--accent-from), var(--accent-to)); color: #fff; box-shadow: 0 5px 14px rgb(37 99 235 / 28%); }
+        .btn-success { background: linear-gradient(120deg, #059669, #047857); color: #fff; box-shadow: 0 5px 14px rgb(5 150 105 / 26%); }
+        .btn-ghost { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+        .btn-ghost:hover { border-color: var(--accent-to); color: var(--accent-text); box-shadow: var(--shadow); }
+
+        .docs-list { margin-top: 4px; }
+        .doc-item {
+            border: 1px solid var(--border); background: var(--surface-2);
+            border-radius: 12px; padding: 12px; margin-bottom: 8px;
+            box-shadow: var(--shadow-sm);
+        }
+        .doc-item:last-child { margin-bottom: 0; }
+        .doc-item-target { border-color: var(--accent-to); box-shadow: 0 0 0 1px var(--accent-to), var(--shadow-sm); }
+        .doc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+        .doc-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+        .meta { font-size: 12px; color: var(--muted); }
+
+        .badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+        .badge-free { background: var(--success-bg); color: var(--success); }
+        .badge-locked { background: var(--warn-bg); color: var(--warn); }
+        .badge-version { background: var(--accent-soft); color: var(--accent-text); }
+        .badge-checked { background: linear-gradient(120deg, var(--accent-from), var(--accent-to)); color: #fff; box-shadow: 0 2px 6px rgb(37 99 235 / 30%); }
+
+        .banner {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 10px; background: linear-gradient(120deg, var(--accent-from), var(--accent-to));
+            color: #fff; border-radius: 12px; padding: 12px 14px; margin: 12px 0;
+            box-shadow: var(--shadow-lg);
+        }
+        .banner-label { display: flex; align-items: center; gap: 6px; font-size: 11px; opacity: 0.9; }
+        .banner strong { font-size: 13.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+        .saved-ok {
+            display: flex; align-items: flex-start; gap: 10px;
+            background: var(--success-bg); color: var(--success);
+            border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+            font-size: 13px; line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div class="app-head">
+            <div>
+                <div class="app-title"><span class="app-logo">PD</span> PlataformaDoc</div>
+                <div class="app-sub">Documentos en Word</div>
+            </div>
+            <button class="theme-toggle" id="btnTheme" type="button" title="Cambiar tema">🌙</button>
+        </div>
+
+        <div id="statusBox" class="status" role="status"></div>
+
+        <!-- PANTALLA DE LOGIN -->
+        <section id="screen-login">
+            <div class="card">
+                <h2>Inicia sesión</h2>
+                <p class="muted small">Usa tus credenciales de PlataformaDoc.</p>
+                <label for="loginEmail">Correo</label>
+                <input type="email" id="loginEmail" placeholder="usuario@despacho.com" autocomplete="username" />
+                <label for="loginPassword">Contraseña</label>
+                <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
+                <button class="btn btn-primary btn-block" id="btnLogin">Iniciar sesión</button>
+            </div>
+        </section>
+
+        <!-- PANTALLA DE DOCUMENTOS -->
+        <section id="screen-docs" class="hidden">
+            <div id="activeBanner" class="banner hidden">
+                <div style="min-width: 0; max-width: 70%;">
+                    <span class="banner-label">🔗 Documento abierto</span>
+                    <strong id="activeDocTitle">&mdash;</strong>
+                </div>
+                <span class="badge badge-checked" id="activeBadge">Editando</span>
+            </div>
+
+            <!-- Lista -->
+            <div class="card">
+                <div class="card-head">
+                    <h2>Documentos</h2>
+                    <span class="card-head-actions">
+                        <button class="btn btn-ghost" id="btnRecheck" title="Buscar el documento controlado abierto en Word">Detectar</button>
+                        <button class="btn btn-ghost" id="btnRefresh">Refrescar</button>
+                    </span>
+                </div>
+                <div id="docsList" class="docs-list">
+                    <p class="muted">Cargando documentos...</p>
+                </div>
+            </div>
+
+            <!-- Vista de edición (reemplaza a la lista mientras hay un documento con metadatos) -->
+            <div id="checkinPanel" class="card hidden">
+                <!-- Modo: editando -->
+                <div id="checkinEdit">
+                    <div class="card-head"><h2>Guardar versión</h2></div>
+                    <p class="muted small">Edita el documento en Word con total fidelidad (usa el .docx descargado). Cuando termines, escribe las notas y sube la nueva versión.</p>
+                    <label for="changeNotes">Notas de cambios <span class="req">*</span></label>
+                    <textarea id="changeNotes" rows="3" maxlength="5000" placeholder="Ej.: Corregí la cláusula 3 y actualicé el encabezado."></textarea>
+                    <button class="btn btn-success btn-block" id="btnCheckin">Guardar versión en la plataforma</button>
+                    <button class="btn btn-ghost btn-block" id="btnUnlock">Salir sin guardar (liberar bloqueo)</button>
+                    <button class="btn btn-ghost btn-block" id="btnLogout">Cerrar sesión</button>
+                </div>
+
+                <!-- Modo: guardado (el documento queda listo para volver a editarlo) -->
+                <div id="checkinSaved" class="hidden">
+                    <div class="card-head"><h2>Versión guardada</h2></div>
+                    <div class="saved-ok">
+                        <span>✅</span>
+                        <div>
+                            <strong id="savedVersion">Versión guardada.</strong>
+                            <p class="small" style="margin-top: 2px;">¿Quieres seguir modificándolo? Vuelve a bloquearlo y descárgalo de nuevo para seguir editando en Word.</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-block" id="btnReedit">Volver a editar en Word</button>
+                    <button class="btn btn-ghost btn-block" id="btnExitSaved">Salir al Explorador</button>
+                    <button class="btn btn-ghost btn-block" id="btnLogout2">Cerrar sesión</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        'use strict';
+
+        // ============================================================
+        //  CONFIGURACION — EDITA ESTA SECCION
+        // ============================================================
+        // La API se toma del MISMO origen que sirve este panel (recomendado).
+        // Para apuntar a otro backend en pruebas añade el parámetro
+        //   ?api=https://tu-host/PlataformaDoc/public
+        // al URL del panel, o cambia la constante de abajo.
+        var url = new URL(location.href);
+        var API_BASE = (url.searchParams.get('api') || location.origin).replace(/\/+$/, '') + '/api/addin';
+
+        var API = {
+            login:     '/login',
+            contents:  '/folders',
+            modify:    function (id) { return '/documents/' + id + '/modify'; },
+            session:   function (id) { return '/documents/' + id + '/session'; },
+            upload:    function (id) { return '/documents/' + id + '/upload'; },
+            unlock:    function (id) { return '/documents/' + id + '/unlock'; },
+            heartbeat: function (id) { return '/documents/' + id + '/heartbeat'; },
+            logout:    '/logout',
+            linkFile:  function (id) { return '/files/' + id + '/link'; }
+        };
+
+        var LS_TOKEN_KEY = 'plataformadoc_addin_token';
+        var LS_USER_KEY  = 'plataformadoc_addin_user_id';
+        var LS_FOLDER_KEY = 'plataformadoc_addin_folder_id';
+        var LS_THEME_KEY = 'plataformadoc_addin_theme';
+
+        // Custom property de Office que vincula el .docx real con el documento
+        // de la plataforma (la inyecta la plataforma en "Modificar").
+        var META_PROP = 'plataforma_doc_id';
+
+        var authToken    = localStorage.getItem(LS_TOKEN_KEY) || '';
+        var currentUserId = localStorage.getItem(LS_USER_KEY) || null;
+        var currentFolderId = (function () {
+            var v = localStorage.getItem(LS_FOLDER_KEY);
+            return v && !isNaN(Number(v)) ? Number(v) : null;
+        })();
+        var activeDoc = null;
+        var currentDocId = null;
+        var docs = [];
+        var currentFolders = [];
+        var currentFiles = [];
+        var currentBreadcrumbs = [];
+        var listSignature = null;
+        var pollHandle = null;
+        var checkingOut = false;
+        // Último documento controlado (el del id con metadatos): es el único que
+        // ofrece la acción "Editar en Word" en el explorador.
+        var highlightDocId = null;
+
+        Office.onReady(function () {
+            setTimeout(initAddIn, 100);
+        });
+
+        function initAddIn() {
+            function $(id) { return document.getElementById(id); }
+
+            var statusBox = $('statusBox');
+            var screenLogin = $('screen-login');
+            var screenDocs = $('screen-docs');
+            var docsList = $('docsList');
+            var busyCheckin = false;
+            var heartbeatHandle = null;
+            var metadataSessionMode = false;
+            var lastRejectedProp = null;
+            var lockReleasedOnClose = false;
+
+            if (!statusBox || !screenLogin || !screenDocs || !docsList) {
+                setTimeout(initAddIn, 200);
+                return;
+            }
+
+            initTheme();
+
+            function setStatus(msg, type) {
+                var box = $('statusBox');
+                if (!box) return;
+                box.textContent = msg;
+                box.className = 'status show alert-' + (type || 'info');
+                clearTimeout(box._timer);
+                box._timer = setTimeout(function () { box.classList.remove('show'); }, 10000);
+            }
+
+            function setButton(btn, loading) {
+                if (!btn) return;
+                btn.disabled = loading;
+                if (loading) { btn.dataset.text = btn.textContent; btn.textContent = 'Procesando...'; }
+                else if (btn.dataset.text) { btn.textContent = btn.dataset.text; }
+            }
+
+            function escapeHtml(v) {
+                return String(v || '')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            }
+
+            function showScreen(name) {
+                var a = $('screen-login'), b = $('screen-docs');
+                if (a) a.classList.toggle('hidden', name !== 'login');
+                if (b) b.classList.toggle('hidden', name !== 'docs');
+            }
+
+            function showActiveBanner(doc) {
+                var t = $('activeDocTitle'), b = $('activeBanner');
+                if (t) t.textContent = doc ? doc.title : '\u2014';
+                if (b) b.classList.toggle('hidden', !doc);
+            }
+
+            // Tema claro/oscuro: se persiste en localStorage y, si no hay
+            // preferencia, se respeta el tema del sistema.
+            function applyTheme(dark) {
+                var root = document.documentElement || document.body;
+                root.setAttribute('data-theme', dark ? 'dark' : 'light');
+                var t = $('btnTheme');
+                if (t) t.textContent = dark ? '\u2600\uFE0F' : '\uD83C\uDF19';
+            }
+            function initTheme() {
+                var stored = localStorage.getItem(LS_THEME_KEY);
+                var dark = stored
+                    ? stored === 'dark'
+                    : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                applyTheme(dark);
+                var t = $('btnTheme');
+                if (t && !t.dataset.hooked) {
+                    t.dataset.hooked = '1';
+                    t.addEventListener('click', function () {
+                        var root = document.documentElement || document.body;
+                        var next = root.getAttribute('data-theme') !== 'dark';
+                        applyTheme(next);
+                        localStorage.setItem(LS_THEME_KEY, next ? 'dark' : 'light');
+                    });
+                }
+            }
+
+            function api(path, opts) {
+                opts = opts || {};
+                var headers = {
+                    'Accept': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                };
+                if (opts.headers) {
+                    Object.keys(opts.headers).forEach(function (k) { headers[k] = opts.headers[k]; });
+                }
+                if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+                if (opts.body && !(opts.body instanceof FormData) && !headers['Content-Type']) {
+                    headers['Content-Type'] = 'application/json';
+                }
+                return fetch(API_BASE + path, {
+                    method: opts.method || 'GET',
+                    headers: headers,
+                    body: opts.body || undefined
+                }).then(function (res) {
+                    var ct = res.headers.get('content-type') || '';
+                    var p = ct.indexOf('application/json') !== -1 ? res.json() : res.blob();
+                    return p.then(function (data) {
+                        if (res.status === 401 && path !== API.login) {
+                            sessionExpired();
+                            throw new Error('Tu sesión expiró o ya no está autenticada. Vuelve a iniciar sesión.');
+                        }
+                        if (!res.ok) {
+                            var err = new Error((data && (data.message || data.error)) || 'Error HTTP ' + res.status);
+                            err.status = res.status;
+                            throw err;
+                        }
+                        return { status: res.status, data: data };
+                    });
+                });
+            }
+
+            function doLogin() {
+                var emailEl = $('loginEmail'), passEl = $('loginPassword');
+                var email = emailEl ? emailEl.value.trim() : '';
+                var password = passEl ? passEl.value : '';
+                if (!email || !password) return setStatus('Introduce tu correo y contraseña.', 'err');
+
+                var btn = $('btnLogin');
+                setButton(btn, true);
+                return api(API.login, {
+                    method: 'POST',
+                    body: JSON.stringify({ email: email, password: password })
+                }).then(function (res) {
+                    var d = res.data;
+                    if (!d.token) throw new Error('La API no devolvió un token.');
+                    authToken = d.token;
+                    currentUserId = d.user ? String(d.user.id) : null;
+                    localStorage.setItem(LS_TOKEN_KEY, authToken);
+                    if (currentUserId) localStorage.setItem(LS_USER_KEY, currentUserId);
+                    currentFolderId = null;
+                    localStorage.removeItem(LS_FOLDER_KEY);
+                    lastRejectedProp = null;
+                    setStatus('Sesión iniciada.', 'ok');
+                    if (passEl) passEl.value = '';
+                    showScreen('docs');
+                    startPolling();
+                    return loadDocuments().then(function () {
+                        return detectActiveEditSession();
+                    });
+                }).catch(function (e) {
+                    setStatus('Login fallido: ' + e.message, 'err');
+                }).finally(function () { setButton(btn, false); });
+            }
+
+            function loadDocuments(silent) {
+                var list = $('docsList');
+                if (!list) return Promise.resolve();
+                if (!silent) list.innerHTML = '<p class="muted">Cargando contenido...</p>';
+                var u = API.contents + (currentFolderId ? '?folder_id=' + encodeURIComponent(currentFolderId) : '');
+                return api(u).then(function (res) {
+                    docs = res.data.documents || [];
+                    currentFolders = res.data.folders || [];
+                    currentFiles = res.data.files || [];
+                    currentBreadcrumbs = res.data.breadcrumbs || [];
+                    var sig = contentsSignature();
+                    if (!silent || sig !== listSignature) {
+                        listSignature = sig;
+                        renderContents();
+                    }
+                }).catch(function (e) {
+                    if (!silent && list) list.innerHTML = '<p class="muted">Error al cargar.</p>';
+                    if (!silent) setStatus(e.message, 'err');
+                });
+            }
+
+            function contentsSignature() {
+                return JSON.stringify({
+                    breadcrumbs: currentBreadcrumbs.map(function (b) { return b.id; }),
+                    folders: currentFolders.map(function (f) { return f.id; }),
+                    docs: docs.map(function (d) {
+                        return [d.id, d.current_version, !!d.is_locked, d.locked_by ? d.locked_by.id : null, d.file_name, !!d.editing_cancelled_at];
+                    }),
+                    files: currentFiles.map(function (f) { return [f.id, f.file_size, f.original_name]; })
+                });
+            }
+
+            function wordSafeName(title) {
+                return String(title || 'documento')
+                    .replace(/[\\/:*?"<>|]/g, '-')
+                    .replace(/\s+/g, ' ')
+                    .trim() || 'documento';
+            }
+
+            function stopHeartbeat() {
+                if (heartbeatHandle) { clearInterval(heartbeatHandle); heartbeatHandle = null; }
+            }
+
+            function startHeartbeat() {
+                stopHeartbeat();
+                lockReleasedOnClose = false;
+                heartbeatHandle = setInterval(function () {
+                    if (!currentDocId || busyCheckin) return;
+                    api(API.heartbeat(currentDocId), { method: 'POST' }).catch(function (e) {
+                        if (e && (e.status === 423 || e.status === 409)) {
+                            var title = activeDoc ? activeDoc.title : '';
+                            var msg = (e.message && /cancelada desde la plataforma/i.test(e.message))
+                                ? e.message
+                                : 'Perdiste el bloqueo de "' + title + '": caducó o fue liberado por un editor.';
+                            exitCheckinView(false, msg, true);
+                        }
+                    });
+                }, 25000);
+            }
+
+            function startPolling() {
+                stopPolling();
+                pollHandle = setInterval(function () {
+                    if (busyCheckin || checkingOut) return;
+                    loadDocuments(true);
+                    if (!metadataSessionMode) detectActiveEditSession(true);
+                }, 8000);
+            }
+
+            function stopPolling() {
+                if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+            }
+
+            function openFolder(id) {
+                currentFolderId = id ? Number(id) : null;
+                if (currentFolderId) localStorage.setItem(LS_FOLDER_KEY, String(currentFolderId));
+                else localStorage.removeItem(LS_FOLDER_KEY);
+                loadDocuments();
+            }
+
+            function renderContents() {
+                var list = $('docsList');
+                if (!list) return;
+                list.innerHTML = '';
+
+                var bc = document.createElement('div');
+                bc.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:2px 0 8px;font-size:12px;';
+                var home = document.createElement('button');
+                home.type = 'button';
+                home.style.cssText = 'border:0;background:transparent;padding:4px 6px;border-radius:6px;color:var(--accent-text);font-weight:700;cursor:pointer;';
+                home.textContent = '\u2302 Este equipo';
+                home.addEventListener('click', function () { openFolder(null); });
+                bc.appendChild(home);
+                currentBreadcrumbs.forEach(function (crumb, index) {
+                    var sep = document.createElement('span'); sep.textContent = '/'; sep.style.cssText = 'color:var(--muted-2);';
+                    bc.appendChild(sep);
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.textContent = escapeHtml(crumb.name);
+                    var isLast = index === currentBreadcrumbs.length - 1;
+                    btn.style.cssText = 'border:0;background:transparent;padding:4px 6px;border-radius:6px;' +
+                        (isLast ? 'color:var(--text);font-weight:700;' : 'color:var(--accent-text);cursor:pointer;');
+                    if (!isLast) btn.addEventListener('click', (function (id) { return function () { openFolder(id); }; })(crumb.id));
+                    bc.appendChild(btn);
+                });
+                list.appendChild(bc);
+
+                var total = currentFolders.length + docs.length + currentFiles.length;
+
+                currentFolders.forEach(function (folder) {
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 2px;border-bottom:1px solid var(--border);cursor:pointer;';
+                    row.innerHTML = '<span style="color:var(--accent-text);font-size:15px;">&#128449;</span>' +
+                        '<strong style="color:var(--accent-text);">' + escapeHtml(folder.name) + '</strong>';
+                    row.addEventListener('click', (function (id) { return function () { openFolder(id); }; })(folder.id));
+                    list.appendChild(row);
+                });
+
+                docs.forEach(function (doc) {
+                    var locked = !!doc.is_locked;
+                    var lockedByName = '';
+                    if (doc.locked_by) {
+                        lockedByName = typeof doc.locked_by === 'object' ? (doc.locked_by.name || '') : String(doc.locked_by);
+                    }
+                    var lockedByMe = locked && doc.locked_by && currentUserId &&
+                        String(doc.locked_by.id) === String(currentUserId);
+                    // Solo el documento que acabamos de controlar (el del id con
+                    // metadatos) ofrece la acción "Editar en Word"; el resto se
+                    // muestra como exploración.
+                    var isTarget = highlightDocId != null && String(doc.id) === String(highlightDocId);
+
+                    var el = document.createElement('div');
+                    el.className = 'doc-item' + (isTarget ? ' doc-item-target' : '');
+                    var html =
+                        '<div class="doc-head"><strong>' + escapeHtml(doc.title) + '</strong>' +
+                        '<span class="badge ' + (locked ? 'badge-locked' : 'badge-free') + '">' +
+                        (locked ? 'Bloqueado' : 'Disponible') + '</span>' +
+                        (doc.current_version ? '<span class="badge badge-version">v' + escapeHtml(doc.current_version) + '</span>' : '') +
+                        '</div>';
+                    if (lockedByName) html += '<p class="meta">Bloqueado por: ' + escapeHtml(lockedByName) + '</p>';
+                    if (isTarget) {
+                        html += '<button class="btn btn-primary btn-block" ' +
+                            (locked && !lockedByMe ? 'disabled' : '') + '>' +
+                            (locked && !lockedByMe ? 'Ocupado por otro usuario' : 'Editar en Word') + '</button>';
+                    }
+                    el.innerHTML = html;
+
+                    var btn = el.querySelector('button');
+                    if (btn) {
+                        if (locked && !lockedByMe) {
+                            btn.addEventListener('click', function () {
+                                setStatus('"' + doc.title + '" está bloqueado por ' + (lockedByName || 'otro usuario') + '.', 'err');
+                            });
+                        } else if (lockedByMe) {
+                            btn.addEventListener('click', function () {
+                                detectActiveEditSession().then(function (sessDoc) {
+                                    if (!sessDoc) startModify(doc);
+                                });
+                            });
+                        } else {
+                            btn.addEventListener('click', (function (d) { return function () { startModify(d); }; })(doc));
+                        }
+                    }
+                    list.appendChild(el);
+                });
+
+                currentFiles.forEach(function (file) {
+                    var size = file.file_size ? (file.file_size / 1024).toFixed(1) + ' KB' : '';
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 2px;border-bottom:1px solid var(--border);';
+                    row.innerHTML = '<span style="color:var(--muted-2);font-size:15px;">&#128196;</span>' +
+                        '<div style="min-width:0;"><strong style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(file.original_name) + '</strong>' +
+                        '<small class="meta">' + escapeHtml(file.mime_type || '') + (size ? ' \u00b7 ' + size : '') + '</small></div>';
+                    list.appendChild(row);
+                });
+
+                if (!total) list.innerHTML += '<p class="muted">Esta carpeta está vacía.</p>';
+            }
+
+            // ============================================================
+            //  DETECCIÓN DE SESIÓN POR METADATOS
+            // ============================================================
+            function readPlataformaDocId(retriesLeft) {
+                retriesLeft = retriesLeft === undefined ? 3 : retriesLeft;
+                return new Promise(function (resolve) {
+                    try {
+                        Word.run(function (context) {
+                            var prop = context.document.properties.customProperties.getItemOrNullObject(META_PROP);
+                            return context.sync().then(function () {
+                                if (!prop || prop.isNullObject) { return resolve(null); }
+                                prop.load('value');
+                                return context.sync().then(function () {
+                                    resolve(prop.value == null ? null : String(prop.value));
+                                });
+                            });
+                        }).catch(function (e) {
+                            if (retriesLeft > 0) {
+                                setTimeout(function () {
+                                    readPlataformaDocId(retriesLeft - 1).then(resolve);
+                                }, 700);
+                            } else {
+                                resolve(null);
+                            }
+                        });
+                    } catch (e) { resolve(null); }
+                });
+            }
+
+            function detectActiveEditSession(quiet) {
+                if (!authToken) return Promise.resolve(null);
+                return readPlataformaDocId().then(function (propId) {
+                    if (!propId) {
+                        if (metadataSessionMode) exitCheckinView(false);
+                        if (!quiet && !metadataSessionMode && lastRejectedProp !== '__noMeta__') {
+                            lastRejectedProp = '__noMeta__';
+                            setStatus('El documento abierto en Word no es de PlataformaDoc. Descárgalo con "Editar en Word" y ábrelo aquí.', 'warn');
+                        }
+                        return null;
+                    }
+                    lastRejectedProp = null;
+                    return api(API.session(propId)).then(function (res) {
+                        var s = res.data.session || {};
+                        if (s.active) {
+                            lastRejectedProp = null;
+                            var doc = res.data.document || { id: propId, title: 'Documento ' + propId };
+                            if (!metadataSessionMode || String(currentDocId) !== String(doc.id)) enterCheckinView(doc);
+                            return doc;
+                        }
+                        if (metadataSessionMode) exitCheckinView(false);
+                        if (!quiet || lastRejectedProp !== propId) {
+                            lastRejectedProp = propId;
+                            if (s.cancelled) {
+                                setStatus('La edición de este documento fue cancelada desde la plataforma. Usa "Editar en Word" para descargarlo de nuevo.', 'err');
+                            } else {
+                                setStatus('El documento abierto no está en una sesión de edición tuya: no puedes guardar cambios desde aquí.', 'warn');
+                            }
+                        }
+                        return null;
+                    }).catch(function (e) {
+                        if (metadataSessionMode) exitCheckinView(false);
+                        if (!quiet) {
+                            setStatus('No se pudo verificar la sesión: ' + (e.message || 'error desconocido') + '. Verifica BASE_URL (túnel ngrok) y que hayas iniciado sesión.', 'err');
+                        }
+                        return null;
+                    });
+                }).catch(function () { return null; });
+            }
+
+            function enterCheckinView(doc) {
+                metadataSessionMode = true;
+                currentDocId = doc.id;
+                activeDoc = doc;
+                highlightDocId = doc.id;
+                currentFolderId = null;
+                localStorage.removeItem(LS_FOLDER_KEY);
+                showActiveBanner(doc);
+                var recBtn = $('btnRecheck'); if (recBtn) recBtn.classList.add('hidden');
+                var list = $('docsList'); if (list) list.style.display = 'none';
+                var edit = $('checkinEdit'), saved = $('checkinSaved');
+                if (saved) saved.classList.add('hidden');
+                if (edit) edit.classList.remove('hidden');
+                var badge = $('activeBadge'); if (badge) badge.textContent = 'Editando';
+                var p = $('checkinPanel'); if (p) p.classList.remove('hidden');
+                startHeartbeat();
+                setStatus('Documento "' + doc.title + '" listo: edítalo en Word y pulsa "Guardar versión".', 'ok');
+            }
+
+            function exitCheckinView(release, msg, warnAsErr) {
+                var docId = currentDocId;
+                metadataSessionMode = false;
+                currentDocId = null;
+                activeDoc = null;
+                showActiveBanner(null);
+                stopHeartbeat();
+                var recBtn = $('btnRecheck'); if (recBtn) recBtn.classList.remove('hidden');
+                var edit = $('checkinEdit'), saved = $('checkinSaved');
+                if (saved) saved.classList.add('hidden');
+                if (edit) edit.classList.remove('hidden');
+                var badge = $('activeBadge'); if (badge) badge.textContent = 'Editando';
+                var p = $('checkinPanel'); if (p) p.classList.add('hidden');
+                var list = $('docsList'); if (list) list.style.display = '';
+                if (release && authToken && docId) {
+                    var headers = { 'Accept': 'application/json', 'ngrok-skip-browser-warning': 'true' };
+                    headers['Authorization'] = 'Bearer ' + authToken;
+                    try { fetch(API_BASE + API.unlock(docId), { method: 'POST', headers: headers, keepalive: true }); } catch (e) {}
+                }
+                if (msg) setStatus(msg, warnAsErr ? 'err' : 'info');
+                loadDocuments(true);
+            }
+
+            // ============================================================
+            //  DESCARGA NATIVA DEL .docx CON METADATOS (fidelidad 100 %)
+            // ============================================================
+            function base64ToBytes(b64) {
+                var clean = b64.replace(/\s/g, '');
+                var raw = atob(clean);
+                var bytes = new Uint8Array(raw.length);
+                for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+                return bytes;
+            }
+
+            function downloadBase64File(b64, name) {
+                try {
+                    var blob = new Blob([base64ToBytes(b64)], {
+                        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    });
+                    if (window.navigator && navigator.msSaveBlob) {
+                        navigator.msSaveBlob(blob, name);
+                        return true;
+                    }
+                    var u;
+                    if (window.URL && URL.createObjectURL) u = URL.createObjectURL(blob);
+                    else if (window.createObjectURL) u = window.createObjectURL(blob);
+                    else return false;
+                    var a = document.createElement('a');
+                    a.href = u;
+                    a.download = name;
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function () {
+                        document.body.removeChild(a);
+                        if (window.URL && URL.revokeObjectURL) URL.revokeObjectURL(u);
+                    }, 5000);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function startModify(doc) {
+                if (checkingOut) return;
+                checkingOut = true;
+                setStatus('Preparando "' + doc.title + '" para editar en Word...', 'info');
+                return api(API.modify(doc.id), { method: 'POST' }).then(function (res) {
+                    var d = res.data;
+                    if (!d.file_base64) throw new Error('Sin file_base64 en la respuesta.');
+                    var name = d.file_name || (wordSafeName(doc.title) + '.docx');
+                    var ok = downloadBase64File(d.file_base64, name);
+                    setStatus(
+                        '"' + doc.title + '" bloqueado para ti.' + (ok
+                            ? ' Se descargó "' + name + '": ábrelo en Word (Archivo > Abrir). Al abrirlo se activará "Guardar versión".'
+                            : ' No se pudo descargar aquí. Usa "Modificar" en la plataforma y ábrelo en Word.'),
+                        ok ? 'ok' : 'warn'
+                    );
+                    return loadDocuments();
+                }).catch(function (e) {
+                    setStatus('No se pudo preparar: ' + e.message, 'err');
+                    return loadDocuments(true);
+                }).finally(function () { checkingOut = false; });
+            }
+
+            function linkAndEdit(file) {
+                setStatus('Vinculando "' + file.original_name + '"...', 'info');
+                return api(API.linkFile(file.id), { method: 'POST' }).then(function (res) {
+                    var linked = res.data.document;
+                    return loadDocuments().then(function () {
+                        var fresh = null;
+                        for (var i = 0; i < docs.length; i++) { if (docs[i].id === linked.id) { fresh = docs[i]; break; } }
+                        return startModify(fresh || linked);
+                    });
+                }).catch(function (e) {
+                    setStatus('No se pudo vincular: ' + e.message, 'err');
+                });
+            }
+
+            // ============================================================
+            //  CHECK-IN (GUARDAR VERSIÓN)
+            // ============================================================
+            function getDocumentBlob() {
+                return new Promise(function (resolve, reject) {
+                    var timeoutId = setTimeout(function () {
+                        reject(new Error('Tiempo agotado al leer el documento (90s). Cierra y vuelve a abrir la tarea y reintenta.'));
+                    }, 90000);
+
+                    function fin(err, blob) {
+                        clearTimeout(timeoutId);
+                        if (err) reject(err); else resolve(blob);
+                    }
+
+                    try {
+                        Office.context.document.getFileAsync(Office.FileType.Compressed, { sliceSize: 4194304 }, function (r) {
+                            try {
+                                if (r.status !== Office.AsyncResultStatus.Succeeded) {
+                                    return fin(new Error('No se pudo leer el documento: ' + ((r.error && r.error.message) || r.error || 'desconocido')));
+                                }
+                                var file = r.value;
+                                if (!file || !file.sliceCount || !file.getSliceAsync) {
+                                    if (file && file.closeAsync) file.closeAsync(function () {});
+                                    return fin(new Error('El documento de Word está vacío o no se puede leer en este momento.'));
+                                }
+                                var proms = [];
+                                for (var i = 0; i < file.sliceCount; i++) {
+                                    (function (idx) {
+                                        proms.push(new Promise(function (ok, fail) {
+                                            file.getSliceAsync(idx, function (sr) {
+                                                try {
+                                                    if (sr.status === Office.AsyncResultStatus.Succeeded) ok(sr.value.data);
+                                                    else fail(new Error((sr.error && sr.error.message) || ('Error leyendo parte ' + idx)));
+                                                } catch (e2) { fail(e2); }
+                                            });
+                                        }));
+                                    })(i);
+                                }
+                                Promise.all(proms).then(function (chunks) {
+                                    try { if (file.closeAsync) file.closeAsync(function () {}); } catch (e) {}
+                                    makeBlob(chunks).then(
+                                        function (blob) { fin(null, blob); },
+                                        function (e) { fin(e); }
+                                    );
+                                }).catch(function (e) {
+                                    try { if (file.closeAsync) file.closeAsync(function () {}); } catch (e2) {}
+                                    fin(e);
+                                });
+                            } catch (e) {
+                                fin(e);
+                            }
+                        });
+                    } catch (e) {
+                        fin(e);
+                    }
+                });
+            }
+
+            function toUint8(c) {
+                return Promise.resolve().then(function () {
+                    var tag = Object.prototype.toString.call(c);
+                    if (tag === '[object ArrayBuffer]') return new Uint8Array(c);
+                    if (ArrayBuffer.isView(c)) return new Uint8Array(c.buffer, c.byteOffset, c.byteLength);
+                    if (typeof c === 'string') {
+                        var b64 = c.replace(/\-/g, '+').replace(/_/g, '/');
+                        if (b64.length % 4) b64 += '===='.slice(b64.length % 4);
+                        var b = atob(b64), o = new Uint8Array(b.length);
+                        for (var j = 0; j < b.length; j++) o[j] = b.charCodeAt(j);
+                        return o;
+                    }
+                    if (tag === '[object Blob]') return c.arrayBuffer();
+                    if (Array.isArray(c)) return new Uint8Array(c);
+                    throw new Error('Bytes inesperados de Office.js: ' + tag + '.');
+                });
+            }
+
+            function makeBlob(chunks) {
+                return Promise.all(chunks.map(toUint8)).then(function (arrs) {
+                    var total = arrs.reduce(function (s, a) { return s + a.length; }, 0);
+                    var out = new Uint8Array(total), off = 0;
+                    arrs.forEach(function (a) { out.set(a, off); off += a.length; });
+                    return new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                });
+            }
+
+            function doCheckIn() {
+                if (busyCheckin) return;
+                if (checkingOut) return setStatus('Espera a que termine el Check-Out del archivo.', 'info');
+                var btn = $('btnCheckin');
+                var notesEl = $('changeNotes');
+                if (!currentDocId) { setStatus('Sin sesión activa. Usa "Editar en Word" y abre el archivo descargado en Word.', 'err'); return; }
+                var notes = notesEl ? notesEl.value.trim() : '';
+                if (!notes) { setStatus('Las notas de cambios son obligatorias.', 'err'); return; }
+                busyCheckin = true;
+                setButton(btn, true);
+                setStatus('Leyendo documento en Word...', 'info');
+                var nowDocId = currentDocId;
+                var savedVersion = '';
+                getDocumentBlob().then(function (blob) {
+                    var form = new FormData();
+                    form.append('file', blob, wordSafeName(activeDoc ? activeDoc.title : 'documento') + '.docx');
+                    form.append('change_notes', notes);
+                    setStatus('Subiendo versión...', 'info');
+                    return api(API.upload(nowDocId), { method: 'POST', body: form });
+                }).then(function (res) {
+                    if (notesEl) notesEl.value = '';
+                    savedVersion = res.data.version ? res.data.version.version_number : '';
+                    setStatus('Versión ' + (savedVersion ? savedVersion + ' ' : '') + 'guardada. Liberando el bloqueo...', 'ok');
+                    return api(API.unlock(nowDocId), { method: 'POST' }).catch(function () { return null; });
+                }).then(function () {
+                    enterSavedState(savedVersion);
+                    setStatus('Versión ' + (savedVersion ? savedVersion + ' ' : '') + 'guardada. El documento sigue disponible: vuelve a editarlo cuando quieras.', 'ok');
+                }).catch(function (e) {
+                    setStatus('Check-In fallido: ' + e.message, 'err');
+                }).finally(function () {
+                    setButton(btn, false);
+                    busyCheckin = false;
+                });
+            }
+
+            // Tras guardar la versión seguimos mostrando SOLO este documento (no
+            // la lista): para seguir editándolo basta con "Volver a editar en Word".
+            function enterSavedState(version) {
+                stopHeartbeat();
+                highlightDocId = currentDocId;
+                var edit = $('checkinEdit'), saved = $('checkinSaved');
+                if (edit) edit.classList.add('hidden');
+                if (saved) saved.classList.remove('hidden');
+                var badge = $('activeBadge'); if (badge) badge.textContent = 'Guardado';
+                var vEl = $('savedVersion');
+                if (vEl) vEl.textContent = version ? 'Versión ' + version + ' guardada.' : 'Versión guardada.';
+            }
+
+            // Vuelve al modo de edición tras un nuevo Check-Out (re-bloqueo + descarga).
+            function enterEditState() {
+                var edit = $('checkinEdit'), saved = $('checkinSaved');
+                if (saved) saved.classList.add('hidden');
+                if (edit) edit.classList.remove('hidden');
+                var badge = $('activeBadge'); if (badge) badge.textContent = 'Editando';
+                var notesEl = $('changeNotes'); if (notesEl) notesEl.value = '';
+                startHeartbeat();
+            }
+
+            // "Volver a editar en Word": vuelve a bloquear y descargar el documento.
+            function redoEdit() {
+                if (busyCheckin) return;
+                if (checkingOut) return setStatus('Espera a que termine la descarga anterior.', 'info');
+                if (!activeDoc) { exitCheckinView(false); return; }
+                return startModify(activeDoc).then(function () {
+                    if (!metadataSessionMode) return;
+                    enterEditState();
+                    setStatus('"' + activeDoc.title + '" bloqueado y descargado de nuevo. Ábrelo en Word (Archivo > Abrir), edítalo y guarda la nueva versión aquí.', 'ok');
+                });
+            }
+
+            function doUnlock() {
+                if (!currentDocId) return setStatus('Sin sesión activa.', 'err');
+                var title = activeDoc ? activeDoc.title : 'documento';
+                setStatus('Liberando el bloqueo de "' + title + '" y volviendo a la lista...', 'info');
+                exitCheckinView(true, 'Edición "' + title + '" cancelada y bloqueo liberado.');
+            }
+
+            function releaseLockQuietly() {
+                if (!authToken || !currentDocId || busyCheckin || lockReleasedOnClose) return;
+                lockReleasedOnClose = true;
+                stopHeartbeat();
+                var headers = { 'Accept': 'application/json', 'ngrok-skip-browser-warning': 'true' };
+                if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+                try {
+                    fetch(API_BASE + API.unlock(currentDocId), { method: 'POST', headers: headers, keepalive: true });
+                } catch (e) {}
+            }
+
+            function sessionExpired() {
+                stopPolling();
+                stopHeartbeat();
+                authToken = ''; currentDocId = null; activeDoc = null;
+                metadataSessionMode = false;
+                localStorage.removeItem(LS_TOKEN_KEY);
+                localStorage.removeItem(LS_USER_KEY);
+                localStorage.removeItem(LS_FOLDER_KEY);
+                currentFolderId = null;
+                showActiveBanner(null);
+                var recBtn = $('btnRecheck'); if (recBtn) recBtn.classList.remove('hidden');
+                var p = $('checkinPanel'); if (p) p.classList.add('hidden');
+                var list = $('docsList'); if (list) list.style.display = '';
+                showScreen('login');
+                setStatus('Tu sesión expiró. Vuelve a iniciar sesión.', 'err');
+            }
+
+            function logout() {
+                releaseLockQuietly();
+                if (authToken) {
+                    var lheaders = { 'Accept': 'application/json', 'ngrok-skip-browser-warning': 'true' };
+                    lheaders['Authorization'] = 'Bearer ' + authToken;
+                    try { fetch(API_BASE + API.logout, { method: 'POST', headers: lheaders, keepalive: true }); } catch (e) {}
+                }
+                stopPolling();
+                stopHeartbeat();
+                authToken = ''; currentDocId = null; activeDoc = null;
+                metadataSessionMode = false;
+                localStorage.removeItem(LS_TOKEN_KEY);
+                localStorage.removeItem(LS_USER_KEY);
+                localStorage.removeItem(LS_FOLDER_KEY);
+                currentFolderId = null;
+                showActiveBanner(null);
+                var recBtn = $('btnRecheck'); if (recBtn) recBtn.classList.remove('hidden');
+                var p = $('checkinPanel'); if (p) p.classList.add('hidden');
+                var list = $('docsList'); if (list) list.style.display = '';
+                showScreen('login'); setStatus('Sesión cerrada.', 'info');
+            }
+
+            window.addEventListener('pagehide', releaseLockQuietly);
+            window.addEventListener('beforeunload', releaseLockQuietly);
+
+            var el;
+            el = $('btnLogin');      if (el) el.addEventListener('click', doLogin);
+            el = $('loginEmail');    if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+            el = $('loginPassword'); if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+            el = $('btnRecheck');    if (el) el.addEventListener('click', function () { detectActiveEditSession(); });
+            el = $('btnRefresh');    if (el) el.addEventListener('click', loadDocuments);
+            el = $('btnCheckin');    if (el) el.addEventListener('click', doCheckIn);
+            el = $('btnUnlock');     if (el) el.addEventListener('click', doUnlock);
+            el = $('btnReedit');     if (el) el.addEventListener('click', redoEdit);
+            el = $('btnExitSaved');  if (el) el.addEventListener('click', function () { exitCheckinView(false); });
+            el = $('btnLogout2');    if (el) el.addEventListener('click', logout);
+            el = $('btnLogout');     if (el) el.addEventListener('click', logout);
+
+            if (authToken) {
+                showScreen('docs');
+                currentDocId = null; activeDoc = null;
+                metadataSessionMode = false;
+                lastRejectedProp = null;
+                startPolling();
+                loadDocuments().then(function () {
+                    setTimeout(function () {
+                        if (!metadataSessionMode && !checkingOut && !busyCheckin) detectActiveEditSession();
+                    }, 1200);
+                });
+            } else {
+                showScreen('login');
+            }
+        }
+    </script>
+</body>
+</html>

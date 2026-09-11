@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { usePermissions } from '@/composables/usePermissions';
@@ -79,14 +79,18 @@ const goToPage = async (page) => {
 
 watch(() => props.file.id, loadPdf, { immediate: true });
 
+const onKeydown = (event) => { if (event.key === 'Escape') emit('close'); };
+onMounted(() => window.addEventListener('keydown', onKeydown));
 onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKeydown);
     pdfDocument?.destroy();
     if (canvasContainer.value) canvasContainer.value.innerHTML = '';
 });
 </script>
 
 <template>
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-2 sm:p-6" @click.self="emit('close')">
+    <Teleport to="body">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-2 sm:p-6" @click.self="emit('close')">
         <section class="flex h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
             <header class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-6">
                 <div class="min-w-0">
@@ -115,4 +119,5 @@ onBeforeUnmount(() => {
             </div>
         </section>
     </div>
+    </Teleport>
 </template>

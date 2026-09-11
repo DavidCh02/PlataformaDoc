@@ -20,6 +20,10 @@ const saveState = ref('Guardado');
 const hasPendingChanges = ref(false);
 const presenceUsers = ref([]);
 const denied = ref(false);
+// Contenido remoto recibido mientras hay cambios locales sin guardar:
+// se aplica justo después del guardado para no pisar lo que escribes.
+const remotePending = ref(null);
+window.enableBroadcasting?.();
 const ydoc = new Y.Doc();
 let saveTimer;
 let saveInterval;
@@ -51,6 +55,13 @@ const save = async () => {
         if (title.value === savedTitle && content.value === savedContent) {
             saveState.value = 'Guardado';
             hasPendingChanges.value = false;
+            if (remotePending.value && remotePending.value !== content.value) {
+                content.value = remotePending.value;
+            }
+            remotePending.value = null;
+            // Empujar el estado final de inmediato para que el otro usuario
+            // no espere al siguiente ciclo del intervalo.
+            void flushSync();
         }
     } catch (error) {
         markSaveError(error);
@@ -83,14 +94,34 @@ const sendPendingChanges = () => {
     navigator.sendBeacon(route('documents.update', props.document.id), data);
     hasPendingChanges.value = false;
 };
-const syncUpdate = async update => {
-    if (!props.canEdit || denied.value) return;
+let lastSyncBody = '';
+let pendingSyncBody = null;
+let syncInFlight = false;
+// Sincronización en tiempo real: cada cambio marca el ÚLTIMO contenido como
+// pendiente y un intervalo lo envía (trailing edge, 1 s). Así el otro usuario
+// recibe siempre la versión completa más reciente, nunca fragmentos de teclas.
+const syncUpdate = update => {
+    if (!props.canEdit || denied.value || typeof update !== 'string') return;
+    pendingSyncBody = update;
+};
+const flushSync = async () => {
+    if (!props.canEdit || denied.value || syncInFlight) return;
+    const body = pendingSyncBody;
+    pendingSyncBody = null;
+    if (body === null || body === lastSyncBody) return;
+    syncInFlight = true;
     try {
-        await axios.post(route('documents.sync', props.document.id), { content: update });
-    } catch (error) {
-        markSaveError(error);
+        await axios.post(route('documents.sync', props.document.id), { content: body });
+        lastSyncBody = body;
+    } catch {
+        // El guardado real va por PATCH; el realtime reintenta solo en el
+        // siguiente ciclo sin ensuciar el estado de guardado.
+        pendingSyncBody = body;
+    } finally {
+        syncInFlight = false;
     }
 };
+const syncFlushTimer = setInterval(() => { void flushSync(); }, 1000);
 
 const refreshSync = () => {
     if (hasPendingChanges.value && !window.confirm('Tienes cambios sin guardar. ¿Recargar y descartarlos?')) return;
@@ -100,7 +131,14 @@ const refreshSync = () => {
 const echoChannel = window.Echo?.private(`document.${props.document.id}`);
 echoChannel?.listen('.DocumentUpdated', event => {
     if (event.user_id === currentUser?.id || typeof event.content !== 'string') return;
-    if (event.content !== content.value) content.value = event.content;
+    // Registrar lo recibido evita rebotar el mismo contenido de vuelta.
+    lastSyncBody = event.content;
+    if (event.content === content.value) return;
+    if (hasPendingChanges.value) {
+        remotePending.value = event.content;
+    } else {
+        content.value = event.content;
+    }
 });
 const currentUserId = Number(currentUser?.id);
 window.Echo?.join(`presence-document.${props.document.id}`)
@@ -111,11 +149,18 @@ window.Echo?.join(`presence-document.${props.document.id}`)
     })
     .leaving(member => { presenceUsers.value = presenceUsers.value.filter(item => item.id !== member.id); });
 
-const uploadImage = async file => new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
-});
+const uploadImage = async file => {
+    if (!file) return null;
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+        const { data } = await axios.post(route('documents.images.store', props.document.id), formData);
+        return data.url || null;
+    } catch (error) {
+        window.alert('No se pudo subir la imagen al servidor.');
+        return null;
+    }
+};
 
 const handlePageExit = () => sendPendingChanges();
 window.addEventListener('pagehide', handlePageExit);
@@ -130,6 +175,7 @@ router.on('before', () => {
 onBeforeUnmount(() => {
     clearTimeout(saveTimer);
     clearInterval(saveInterval);
+    clearInterval(syncFlushTimer);
     window.removeEventListener('pagehide', handlePageExit);
     window.removeEventListener('beforeunload', handlePageExit);
     sendPendingChanges();
@@ -145,15 +191,16 @@ onBeforeUnmount(() => {
         <template #header>
 <div class="flex flex-wrap items-center justify-between gap-4">
                     <div class="flex min-w-0 items-center gap-2">
-                        <Link :href="route('dashboard')" title="Volver al explorador" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-sky-300 hover:bg-slate-50"><ArrowLeft :size="16" /></Link>
-                        <button type="button" title="Documento anterior" :disabled="!prevSibling" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-sky-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" @click="goToEditor(prevSibling)"><ChevronLeft :size="16" /></button>
-                        <button type="button" title="Documento siguiente" :disabled="!nextSibling" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-sky-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" @click="goToEditor(nextSibling)"><ChevronRight :size="16" /></button>
-                        <span class="text-slate-300">/</span>
-                        <input v-model="title" :disabled="!canEdit || denied" class="min-w-0 border-0 bg-transparent p-0 text-xl font-semibold text-slate-900 focus:ring-0" @input="scheduleSave" />
+                        <Link :href="route('dashboard')" title="Volver al explorador" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 shadow-sm transition hover:border-sky-300 hover:bg-slate-50 dark:hover:bg-slate-700/40"><ArrowLeft :size="16" /></Link>
+                        <button type="button" title="Documento anterior" :disabled="!prevSibling" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 shadow-sm transition hover:border-sky-300 hover:bg-slate-50 dark:hover:bg-slate-700/40 disabled:cursor-not-allowed disabled:opacity-40" @click="goToEditor(prevSibling)"><ChevronLeft :size="16" /></button>
+                        <button type="button" title="Documento siguiente" :disabled="!nextSibling" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 shadow-sm transition hover:border-sky-300 hover:bg-slate-50 dark:hover:bg-slate-700/40 disabled:cursor-not-allowed disabled:opacity-40" @click="goToEditor(nextSibling)"><ChevronRight :size="16" /></button>
+                        <span class="text-slate-300 dark:text-slate-600">/</span>
+                        <input v-model="title" :disabled="!canEdit || denied" class="min-w-0 border-0 bg-transparent p-0 text-xl font-semibold text-slate-900 dark:text-white focus:ring-0" @input="scheduleSave" />
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="text-sm" :class="saveState.includes('permiso') || saveState.includes('Error') ? 'font-semibold text-red-600' : saveState !== 'Guardado' ? 'font-medium text-amber-600' : 'text-slate-500'">{{ saveState }}</span>
-                        <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 shadow-sm transition hover:border-sky-300 hover:bg-slate-50" title="Recargar sincronización: vuelve a cargar el documento y restablece la colaboración en vivo" @click="refreshSync"><RefreshCw :size="15" /></button>
+                        <span class="text-sm" :class="saveState.includes('permiso') || saveState.includes('Error') ? 'font-semibold text-red-600' : saveState !== 'Guardado' ? 'font-medium text-amber-600' : 'text-slate-500 dark:text-slate-400'">{{ saveState }}</span>
+                        <span v-if="remotePending" class="text-sm font-medium text-sky-600" title="Otro colaborador guardó cambios; se aplicarán al guardar los tuyos">Cambios remotos pendientes</span>
+                        <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 shadow-sm transition hover:border-sky-300 hover:bg-slate-50 dark:hover:bg-slate-700/40" title="Recargar sincronización: vuelve a cargar el documento y restablece la colaboración en vivo" @click="refreshSync"><RefreshCw :size="15" /></button>
                         <div v-if="presenceUsers.length" class="flex items-center -space-x-2" title="Colaboradores conectados">
                             <span v-for="member in presenceUsers" :key="member.id" class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-xs font-semibold text-white" :style="{ backgroundColor: `hsl(${(Number(member.id) * 137) % 360} 70% 45%)` }" :title="`${member.name} está editando`">{{ member.name?.charAt(0)?.toUpperCase() }}</span>
                         </div>

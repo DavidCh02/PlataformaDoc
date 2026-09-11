@@ -45,7 +45,7 @@ const closeModal = () => {
                 Eliminar cuenta
             </h2>
 
-            <p class="mt-1 text-sm text-slate-500">
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Una vez eliminada tu cuenta, todos sus recursos y datos se
                 borrarán de forma permanente. Antes de eliminarla, descarga
                 cualquier dato o información que quieras conservar.
@@ -55,12 +55,12 @@ const closeModal = () => {
         <DangerButton @click="confirmUserDeletion">Eliminar cuenta</DangerButton>
 
         <Modal :show="confirmingUserDeletion" @close="closeModal">
-            <div class="p-6">
-                <h2 class="text-lg font-medium text-slate-900">
+            <div class="p-6 dark:bg-slate-800">
+                <h2 class="text-lg font-medium text-slate-900 dark:text-white">
                     ¿Seguro que quieres eliminar tu cuenta?
                 </h2>
 
-                <p class="mt-1 text-sm text-slate-500">
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     Una vez eliminada tu cuenta, todos sus recursos y datos se
                     borrarán de forma permanente. Escribe tu contraseña para
                     confirmar que quieres eliminar tu cuenta definitivamente.

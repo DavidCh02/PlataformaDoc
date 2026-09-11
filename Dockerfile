@@ -27,11 +27,12 @@ RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framewor
  && composer dump-autoload --optimize \
  && php artisan package:discover --ansi \
  && npm ci --no-audit --no-fund \
- && npm run build \
- && php artisan optimize
+ && npm run build
 
 EXPOSE 8080
 
 # BROWSERSHOT_CHROME_PATH se resuelve aquí (/usr/bin/chromium en Debian).
 # $PORT lo inyecta Railway. No fijar PORT manualmente.
-CMD export BROWSERSHOT_CHROME_PATH=$(which chromium) && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=$PORT
+# optimize va en el arranque (no en el build) para que los cambios de
+# variables de entorno apliquen sin reconstruir la imagen.
+CMD export BROWSERSHOT_CHROME_PATH=$(which chromium) && php artisan optimize && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=$PORT

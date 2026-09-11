@@ -65,9 +65,9 @@ const permissionLabel = (name) => name.replace(/\./g, ' · ');
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <Link :href="route('admin.users.index')" class="text-sm text-slate-500 hover:text-slate-900">Administración</Link>
-                    <h2 class="text-2xl font-semibold text-slate-900">Permisos por rol</h2>
-                    <p class="text-sm text-slate-500">Marca qué acciones puede realizar cada rol. El rol «admin» conserva siempre la administración.</p>
+                    <Link :href="route('admin.users.index')" class="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">Administración</Link>
+                    <h2 class="text-2xl font-semibold text-slate-900 dark:text-white">Permisos por rol</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Marca qué acciones puede realizar cada rol. El rol «admin» conserva siempre la administración.</p>
                 </div>
             </div>
         </template>
@@ -80,17 +80,17 @@ const permissionLabel = (name) => name.replace(/\./g, ' · ');
                 {{ $page.props.errors.permissions }}
             </div>
 
-            <section v-for="role in roles" :key="role.id" class="rounded-lg border border-slate-200 bg-white shadow-sm">
-                <header class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+            <section v-for="role in roles" :key="role.id" class="rounded-lg border border-slate-200 bg-white shadow-sm dark:bg-slate-800 dark:border-slate-700">
+                <header class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 px-5 py-4">
                     <div class="flex items-center gap-3">
                         <span class="rounded-md bg-sky-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">{{ role.name }}</span>
-                        <span class="text-xs text-slate-500">{{ roleCount(role.name) }} de {{ permissions.length }} permisos</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">{{ roleCount(role.name) }} de {{ permissions.length }} permisos</span>
                     </div>
                     <div class="flex items-center gap-2">
-                        <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
+                        <label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
                             <input
                                 type="checkbox"
-                                class="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                class="rounded border-slate-300 text-sky-600 focus:ring-sky-500 dark:border-slate-600"
                                 :checked="allSelected(role.name)"
                                 @change="toggleAll(role.name)"
                             />
@@ -111,17 +111,17 @@ const permissionLabel = (name) => name.replace(/\./g, ' · ');
                     <label
                         v-for="permission in permissions"
                         :key="`${role.name}-${permission.name}`"
-                        class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-slate-50"
+                        class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700/40"
                     >
                         <div class="min-w-0">
-                            <p class="truncate text-sm font-medium text-slate-800">{{ permissionLabel(permission.name) }}</p>
-                            <p v-if="role.name === 'admin' && permission.name === 'users.manage'" class="text-xs text-slate-500">
+                            <p class="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{{ permissionLabel(permission.name) }}</p>
+                            <p v-if="role.name === 'admin' && permission.name === 'users.manage'" class="text-xs text-slate-500 dark:text-slate-400">
                                 Obligatorio
                             </p>
                         </div>
                         <input
                             type="checkbox"
-                            class="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                            class="rounded border-slate-300 text-sky-600 focus:ring-sky-500 dark:border-slate-600"
                             :disabled="!canEditPermission(role) && permission.name === 'users.manage'"
                             :checked="isSelected(role.name, permission.name)"
                             @change="toggle(role.name, permission.name)"

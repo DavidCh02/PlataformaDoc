@@ -10,11 +10,15 @@ use Throwable;
 
 class DocumentPdfExporter
 {
+    public function __construct(private DocumentImageService $images) {}
+
     public function export(Document $document): string
     {
+        // Las imágenes del documento viven en URLs con permiso: para el PDF
+        // (Chrome sin sesión) se incrustan en base64 solo en la exportación.
         $html = view('documents.pdf', [
             'title' => $document->title,
-            'content' => $document->content ?? '',
+            'content' => $this->images->inlineImagesForExport($document->content ?? ''),
         ])->render();
 
         $directory = storage_path('app/temp/pdf');
@@ -27,6 +31,7 @@ class DocumentPdfExporter
                 ->format('A4')
                 ->margins(22, 20, 22, 20, 'mm')
                 ->showBackground()
+                ->noSandbox()
                 ->waitUntilNetworkIdle();
 
             if ($nodeBinary = config('services.browsershot.node_binary')) {

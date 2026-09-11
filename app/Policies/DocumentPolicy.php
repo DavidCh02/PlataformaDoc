@@ -19,7 +19,7 @@ class DocumentPolicy
 
     public function update(User $user, Document $document): bool
     {
-        return $user->can('docs.edit_realtime');
+        return $user->can('docs.edit_realtime') || $document->user_id === $user->id;
     }
 
         public function delete(User $user, Document $document): bool

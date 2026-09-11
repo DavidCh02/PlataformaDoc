@@ -1,0 +1,81 @@
+<div id="app-container">
+  <!-- Cabecera -->
+  <div class="app-head">
+    <div>
+      <div class="app-title"><span class="app-logo">PD</span> PlataformaDoc</div>
+      <div class="app-sub">Documentos en Word</div>
+    </div>
+    <button class="theme-toggle" id="btnTheme" type="button" title="Cambiar tema">🌙</button>
+  </div>
+
+  <!-- Estado visual -->
+  <div id="statusBox" class="status" role="status"></div>
+
+  <!-- PANTALLA DE LOGIN -->
+  <section id="screen-login">
+    <div class="card">
+      <h2>Inicia sesión</h2>
+      <p class="muted small">Usa tus credenciales de PlataformaDoc.</p>
+      <label for="loginEmail">Correo</label>
+      <input type="email" id="loginEmail" placeholder="usuario@despacho.com" autocomplete="username" />
+      <label for="loginPassword">Contraseña</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
+      <button class="btn btn-primary btn-block" id="btnLogin">Iniciar sesión</button>
+    </div>
+  </section>
+
+  <!-- PANTALLA DE DOCUMENTOS -->
+  <section id="screen-docs" class="hidden">
+    <!-- Banner documento abierto -->
+    <div id="activeBanner" class="banner hidden">
+      <div style="min-width: 0; max-width: 70%;">
+        <span class="banner-label">🔗 Documento abierto</span>
+        <strong id="activeDocTitle">&mdash;</strong>
+      </div>
+      <span class="badge badge-checked" id="activeBadge">Editando</span>
+    </div>
+
+    <!-- Lista -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Documentos</h2>
+        <span class="card-head-actions">
+          <button class="btn btn-ghost" id="btnRecheck" title="Buscar el documento controlado abierto en Word">Detectar</button>
+          <button class="btn btn-ghost" id="btnRefresh">Refrescar</button>
+        </span>
+      </div>
+      <div id="docsList" class="docs-list">
+        <p class="muted">Cargando documentos...</p>
+      </div>
+    </div>
+
+    <!-- Vista de edición (reemplaza a la lista mientras hay un documento con metadatos) -->
+    <div id="checkinPanel" class="card hidden">
+      <!-- Modo: editando -->
+      <div id="checkinEdit">
+        <div class="card-head"><h2>Guardar versión</h2></div>
+        <p class="muted small">Edita el documento en Word con total fidelidad (usa el .docx descargado). Cuando termines, escribe las notas y sube la nueva versión.</p>
+        <label for="changeNotes">Notas de cambios <span class="req">*</span></label>
+        <textarea id="changeNotes" rows="3" maxlength="5000" placeholder="Ej.: Corregí la cláusula 3 y actualicé el encabezado."></textarea>
+        <button class="btn btn-success btn-block" id="btnCheckin">Guardar versión en la plataforma</button>
+        <button class="btn btn-ghost btn-block" id="btnUnlock">Salir sin guardar (liberar bloqueo)</button>
+        <button class="btn btn-ghost btn-block" id="btnLogout">Cerrar sesión</button>
+      </div>
+
+      <!-- Modo: guardado (el documento queda listo para volver a editarlo) -->
+      <div id="checkinSaved" class="hidden">
+        <div class="card-head"><h2>Versión guardada</h2></div>
+        <div class="saved-ok">
+          <span>✅</span>
+          <div>
+            <strong id="savedVersion">Versión guardada.</strong>
+            <p class="small" style="margin-top: 2px;">Quieres seguir modificándolo? Vuelve a bloquearlo y descárgalo de nuevo para seguir editando en Word.</p>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" id="btnReedit">Volver a editar en Word</button>
+        <button class="btn btn-ghost btn-block" id="btnExitSaved">Salir al Explorador</button>
+        <button class="btn btn-ghost btn-block" id="btnLogout2">Cerrar sesión</button>
+      </div>
+    </div>
+  </section>
+</div>

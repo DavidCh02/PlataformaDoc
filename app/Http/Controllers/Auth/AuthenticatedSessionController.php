@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\LockManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -39,8 +40,14 @@ class AuthenticatedSessionController extends Controller
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, LockManager $lockManager): RedirectResponse
     {
+        // Liberar cualquier documento bloqueado por el usuario antes de cerrar
+        // la sesión para que no quede "bloqueado para siempre".
+        if ($user = $request->user()) {
+            $lockManager->releaseForUser($user->getKey(), $request);
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

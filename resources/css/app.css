@@ -1,3 +1,189 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Paleta de la plataforma. Variables CSS que cambian con el tema (claro/oscuro)
+ * para dar profundidad: superficies con gradiente, bordes definidos y sombras. */
+:root {
+    --pd-bg: #eef2f7;
+    --pd-bg-gradient: linear-gradient(180deg, #f7fafc 0%, #e9eef5 100%);
+    --pd-surface: #ffffff;
+    --pd-surface-2: #f8fafc;
+    --pd-surface-3: #f1f5f9;
+    --pd-border: #e2e8f0;
+    --pd-border-strong: #cbd5e1;
+    --pd-text: #0f172a;
+    --pd-text-2: #334155;
+    --pd-text-3: #64748b;
+    --pd-text-4: #94a3b8;
+    --pd-accent: #0ea5e9;
+    --pd-accent-2: #2563eb;
+    --pd-accent-soft: #e0f2fe;
+    --pd-accent-text: #0369a1;
+    --pd-success-soft: #ecfdf5;
+    --pd-success-text: #047857;
+    --pd-warn-soft: #fffbeb;
+    --pd-warn-text: #b45309;
+    --pd-danger-text: #b91c1c;
+    --pd-danger-border: #fecaca;
+    --pd-danger-hover: #fef2f2;
+    --pd-shadow-sm: 0 1px 2px rgb(15 23 42 / 6%);
+    --pd-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+    --pd-shadow-lg: 0 16px 40px rgb(15 23 42 / 16%);
+    --pd-preview: #eef1f5;
+    color-scheme: light;
+}
+
+.dark {
+    --pd-bg: #0b1424;
+    --pd-bg-gradient: linear-gradient(180deg, #101d33 0%, #0b1424 100%);
+    --pd-surface: #16233b;
+    --pd-surface-2: #122036;
+    --pd-surface-3: #0f1b2e;
+    --pd-border: #243450;
+    --pd-border-strong: #33476b;
+    --pd-text: #f1f5f9;
+    --pd-text-2: #cbd5e1;
+    --pd-text-3: #94a3b8;
+    --pd-text-4: #64748b;
+    --pd-accent: #38bdf8;
+    --pd-accent-2: #60a5fa;
+    --pd-accent-soft: #0e2942;
+    --pd-accent-text: #7dd3fc;
+    --pd-success-soft: #06311f;
+    --pd-success-text: #34d399;
+    --pd-warn-soft: #36280c;
+    --pd-warn-text: #fbbf24;
+    --pd-danger-text: #f87171;
+    --pd-danger-border: #7f1d1d;
+    --pd-danger-hover: #3b0f0f;
+    --pd-shadow-sm: 0 1px 2px rgb(0 0 0 / 45%);
+    --pd-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+    --pd-shadow-lg: 0 16px 40px rgb(0 0 0 / 60%);
+    --pd-preview: #0a1020;
+    color-scheme: dark;
+}
+
+body {
+    min-height: 100vh;
+    background: var(--pd-bg-gradient);
+    color: var(--pd-text-2);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+/* Transición suave al alternar el tema. */
+html.theme-transition * {
+    transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease !important;
+}
+
+@layer components {
+    /* Botones compartidos de la plataforma (Explorador, historial, paneles). */
+    .explorer-action-button,
+    .explorer-header-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: 1px solid var(--pd-border);
+        border-radius: 0.5rem;
+        background: linear-gradient(180deg, var(--pd-surface) 0%, var(--pd-surface-2) 100%);
+        padding: 0.45rem 0.8rem;
+        color: var(--pd-text-2);
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: var(--pd-shadow-sm), inset 0 1px 0 rgb(255 255 255 / 35%);
+        transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease, background 120ms ease;
+    }
+    .explorer-action-button:hover,
+    .explorer-header-button:hover {
+        border-color: var(--pd-accent);
+        color: var(--pd-accent-text);
+        box-shadow: 0 4px 14px rgb(14 165 233 / 18%), inset 0 1px 0 rgb(255 255 255 / 35%);
+        transform: translateY(-1px);
+    }
+    .explorer-action-button:disabled,
+    .explorer-header-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+        transform: none;
+        box-shadow: none;
+    }
+    .dark .explorer-action-button,
+    .dark .explorer-header-button {
+        box-shadow: var(--pd-shadow-sm), inset 0 1px 0 rgb(255 255 255 / 6%);
+    }
+
+    .explorer-primary-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 0.5rem;
+        background: linear-gradient(120deg, var(--pd-accent) 0%, var(--pd-accent-2) 100%);
+        padding: 0.5rem 0.95rem;
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 600;
+        box-shadow: 0 6px 18px rgb(37 99 235 / 30%), inset 0 1px 0 rgb(255 255 255 / 22%);
+        transition: box-shadow 120ms ease, transform 120ms ease, filter 120ms ease;
+    }
+    .explorer-primary-button:hover {
+        box-shadow: 0 10px 24px rgb(37 99 235 / 38%), inset 0 1px 0 rgb(255 255 255 / 22%);
+        transform: translateY(-1px);
+        filter: brightness(1.04);
+    }
+    .explorer-primary-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+        transform: none;
+        filter: none;
+    }
+
+    .explorer-danger-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 0.5rem;
+        background: linear-gradient(120deg, #ef4444 0%, #b91c1c 100%);
+        padding: 0.5rem 0.95rem;
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 600;
+        box-shadow: 0 6px 18px rgb(239 68 68 / 30%), inset 0 1px 0 rgb(255 255 255 / 22%);
+        transition: box-shadow 120ms ease, transform 120ms ease, filter 120ms ease;
+    }
+    .explorer-danger-button:hover {
+        box-shadow: 0 10px 24px rgb(239 68 68 / 38%), inset 0 1px 0 rgb(255 255 255 / 22%);
+        transform: translateY(-1px);
+        filter: brightness(1.04);
+    }
+
+    /* Estilos base de las tablas para que se adapten y no corten contenido. */
+    .pd-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .pd-table-wrap table {
+        min-width: 100%;
+    }
+}
+
+/* Lienzo de los visores de documentos Word (renderizado con docx-preview).
+ * La librería genera páginas <section class="docx-wrapper"> (misma clase que
+ * el contenedor externo) dentro de un wrapper <div class="docx-wrapper-wrapper">.
+ * Por eso el lienzo se acota a <div> y las hojas se estilizan aparte. */
+div.docx-wrapper {
+    background-color: var(--pd-preview);
+    padding: 20px;
+}
+
+/* Las páginas (hojas) SIEMPRE se pintan en blanco con texto oscuro por
+ * defecto, incluso en tema oscuro: con color-scheme: dark las hojas quedan
+ * transparentes y las letras negras se pierden sobre el lienzo oscuro.
+ * Los colores explícitos del documento se conservan (van como estilos inline). */
+section.docx-wrapper {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    box-shadow: var(--pd-shadow-lg) !important;
+}

@@ -37,12 +37,21 @@ return [
     |
     */
 
-    'guards' => [
-        'web' => [
-            'driver' => 'session',
-            'provider' => 'users',
-        ],
-    ],
+'guards' => [
+          'web' => [
+              'driver' => 'session',
+              'provider' => 'users',
+          ],
+
+          // Guard para la API REST del Add-in de Word (Laravel Sanctum).
+          // El provider lo resuelve el propio Sanctum a partir del token; se
+          // deja en null para no interferir con la detección del guard de
+          // Spatie para el modelo User (que debe seguir siendo 'web').
+          'sanctum' => [
+              'driver' => 'sanctum',
+              'provider' => null,
+          ],
+      ],
 
     /*
     |--------------------------------------------------------------------------

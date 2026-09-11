@@ -30,12 +30,12 @@ const formatDate = (iso) => {
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <p class="text-sm font-medium text-slate-500">Administración</p>
-                    <h2 class="text-2xl font-semibold text-slate-900">Registro de auditoría</h2>
+                    <p class="text-sm font-medium text-slate-500 dark:text-slate-400">Administración</p>
+                    <h2 class="text-2xl font-semibold text-slate-900 dark:text-white">Registro de auditoría</h2>
                 </div>
                 <Link
                     :href="route('admin.users.index')"
-                    class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700/40"
                 >
                     Volver a usuarios
                 </Link>
@@ -43,10 +43,10 @@ const formatDate = (iso) => {
         </template>
 
         <div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-            <div class="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4">
+            <div class="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:bg-slate-800 dark:border-slate-700">
                 <div>
-                    <label for="action-filter" class="block text-sm font-medium text-slate-700">Filtrar por acción</label>
-                    <select id="action-filter" v-model="actionFilter" class="mt-1 rounded-md border-slate-300">
+                    <label for="action-filter" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Filtrar por acción</label>
+                    <select id="action-filter" v-model="actionFilter" class="mt-1 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
                         <option value="">Todas</option>
                         <option v-for="action in actions" :key="action" :value="action">{{ action }}</option>
                     </select>
@@ -60,33 +60,35 @@ const formatDate = (iso) => {
                 </button>
             </div>
 
-            <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50">
-                        <tr>
-                            <th class="px-4 py-3 text-left font-semibold text-slate-500">Fecha</th>
-                            <th class="px-4 py-3 text-left font-semibold text-slate-500">Usuario</th>
-                            <th class="px-4 py-3 text-left font-semibold text-slate-500">Acción</th>
-                            <th class="px-4 py-3 text-left font-semibold text-slate-500">Recurso</th>
-                            <th class="px-4 py-3 text-left font-semibold text-slate-500">IP</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        <tr v-for="log in logs.data" :key="log.id" class="hover:bg-slate-50">
-                            <td class="px-4 py-3 whitespace-nowrap text-slate-600">{{ formatDate(log.created_at) }}</td>
-                            <td class="px-4 py-3">
-                                <p class="font-medium text-slate-800">{{ log.user?.name || 'Sistema' }}</p>
-                                <p class="text-xs text-slate-500">{{ log.user?.email }}</p>
-                            </td>
-                            <td class="px-4 py-3 font-mono text-xs text-slate-700">{{ log.action }}</td>
-                            <td class="px-4 py-3 text-xs text-slate-500">
-                                <span v-if="log.auditable_type">{{ log.auditable_type }} #{{ log.auditable_id }}</span>
-                                <span v-else>—</span>
-                            </td>
-                            <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ log.ip_address }}</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="overflow-hidden rounded-lg border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700">
+                <div class="pd-table-wrap">
+                    <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50 dark:bg-slate-700/40">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-500 dark:text-slate-400">Fecha</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-500 dark:text-slate-400">Usuario</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-500 dark:text-slate-400">Acción</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-500 dark:text-slate-400">Recurso</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-500 dark:text-slate-400">IP</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                            <tr v-for="log in logs.data" :key="log.id" class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">{{ formatDate(log.created_at) }}</td>
+                                <td class="px-4 py-3">
+                                    <p class="font-medium text-slate-800 dark:text-slate-100">{{ log.user?.name || 'Sistema' }}</p>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">{{ log.user?.email }}</p>
+                                </td>
+                                <td class="px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-300">{{ log.action }}</td>
+                                <td class="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                                    <span v-if="log.auditable_type">{{ log.auditable_type }} #{{ log.auditable_id }}</span>
+                                    <span v-else>—</span>
+                                </td>
+                                <td class="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-400">{{ log.ip_address }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <div v-if="logs.links?.length > 3" class="flex flex-wrap gap-2">
@@ -95,7 +97,7 @@ const formatDate = (iso) => {
                     :key="link.label"
                     :href="link.url || '#'"
                     class="rounded-md border px-3 py-1 text-sm"
-                    :class="link.active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-50'"
+                    :class="link.active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700/40'"
                     v-html="link.label"
                 />
             </div>

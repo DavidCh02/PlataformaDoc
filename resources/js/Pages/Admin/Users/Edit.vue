@@ -65,9 +65,9 @@ const permissionLabel = (name) => name.replace(/\./g, ' · ');
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <Link :href="route('admin.users.index')" class="text-sm text-slate-500 hover:text-slate-900">Usuarios</Link>
-                    <h2 class="text-2xl font-semibold text-slate-900">{{ managedUser.name }}</h2>
-                    <p class="text-sm text-slate-500">{{ managedUser.email }}</p>
+                    <Link :href="route('admin.users.index')" class="text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">Usuarios</Link>
+                    <h2 class="text-2xl font-semibold text-slate-900 dark:text-white">{{ managedUser.name }}</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">{{ managedUser.email }}</p>
                 </div>
             </div>
         </template>
@@ -77,39 +77,39 @@ const permissionLabel = (name) => name.replace(/\./g, ' · ');
                 {{ $page.props.flash.success }}
             </div>
 
-            <section class="rounded-lg border border-slate-200 bg-white p-6">
-                <h3 class="text-lg font-semibold text-slate-900">Rol y permisos</h3>
-                <p class="mt-1 text-sm text-slate-500">
+            <section class="rounded-lg border border-slate-200 bg-white p-6 dark:bg-slate-800 dark:border-slate-700">
+                <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Rol y permisos</h3>
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     Elige un rol para precargar sus permisos por defecto y añade o quita otros con los checkboxes.
                     Desmarcar un permiso lo desactiva solo para este usuario, aunque el rol lo incluya.
                 </p>
 
-                <label for="role" class="mt-4 block text-sm font-medium text-slate-700">Rol</label>
+                <label for="role" class="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-300">Rol</label>
                 <select
                     id="role"
                     v-model="userForm.role"
-                    class="mt-1 rounded-md border-slate-300"
+                    class="mt-1 rounded-md border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                     @change="userForm.errors.role = null"
                 >
                     <option v-for="role in roles" :key="role" :value="role">{{ role }}</option>
                 </select>
                 <p v-if="userForm.errors.role" class="mt-1 text-sm text-red-600">{{ userForm.errors.role }}</p>
 
-                <div class="mt-6 divide-y divide-slate-100 rounded-lg border border-slate-200">
+                <div class="mt-6 divide-y divide-slate-100 dark:divide-slate-700 rounded-lg border border-slate-200 dark:border-slate-700">
                     <label
                         v-for="permission in permissions"
                         :key="permission.name"
-                        class="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50"
+                        class="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/40"
                     >
                         <div>
-                            <p class="font-medium text-slate-800">{{ permissionLabel(permission.name) }}</p>
-                            <p v-if="defaultPermissionsForRole.includes(permission.name)" class="text-xs text-slate-500">
+                            <p class="font-medium text-slate-800 dark:text-slate-100">{{ permissionLabel(permission.name) }}</p>
+                            <p v-if="defaultPermissionsForRole.includes(permission.name)" class="text-xs text-slate-500 dark:text-slate-400">
                                 Por defecto del rol «{{ userForm.role }}»
                             </p>
                         </div>
                         <input
                             type="checkbox"
-                            class="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                            class="rounded border-slate-300 text-sky-600 focus:ring-sky-500 dark:border-slate-600"
                             :checked="userForm.permissions.includes(permission.name)"
                             @change="togglePermission(permission.name)"
                         />

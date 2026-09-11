@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UploadFileRequest;
+use App\Models\Document;
 use App\Models\File;
 use App\Services\AuditLogger;
+use App\Services\WordDocumentLinker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -13,20 +15,21 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FileController extends Controller
 {
-    public function store(UploadFileRequest $request): RedirectResponse
+    public function store(UploadFileRequest $request, WordDocumentLinker $linker): RedirectResponse
     {
         $this->authorize('upload', File::class);
 
         $uploadedFile = $request->file('file');
+        $extension = strtolower($uploadedFile->getClientOriginalExtension());
         $disk = config('filesystems.default');
-        $storedName = Str::uuid().'.'.$uploadedFile->getClientOriginalExtension();
+        $storedName = Str::uuid().'.'.$extension;
         $storagePath = $uploadedFile->storeAs(
             'files/'.$request->user()->id,
             $storedName,
             $disk,
         );
 
-        File::create([
+        $file = File::create([
             'name' => pathinfo($uploadedFile->getClientOriginalName(), PATHINFO_FILENAME),
             'original_name' => $uploadedFile->getClientOriginalName(),
             'mime_type' => $uploadedFile->getMimeType() ?? 'application/octet-stream',
@@ -36,7 +39,17 @@ class FileController extends Controller
             'user_id' => $request->user()->id,
         ]);
 
-        return back()->with('success', 'Archivo subido correctamente.');
+        // Un .docx subido desde el Explorador se convierte al instante en un
+        // documento editable por el Add-in (acciones Modificar / Subir versión /
+        // Historial), conservando el binario original como v1. El resto de
+        // archivos siguen entrando como archivos sueltos.
+        if ($extension === 'docx' && $request->user()->can('docs.create')) {
+            $linker->link($file, $request->user());
+        }
+
+        return back()->with('success', $extension === 'docx' && $file->document_id
+            ? 'Documento de Word subido. Ya puedes editarlo en Word (Modificar), subir versiones o ver su historial.'
+            : 'Archivo subido correctamente.');
     }
 
     public function download(File $file, AuditLogger $auditLogger): StreamedResponse
@@ -74,7 +87,14 @@ class FileController extends Controller
     public function destroy(File $file): RedirectResponse
     {
         $this->authorize('delete', $file);
-        $file->forceFill(['updated_by_id' => request()->user()->id])->saveQuietly();
+        $userId = request()->user()->id;
+        $file->forceFill(['updated_by_id' => $userId])->saveQuietly();
+        // Si el archivo es la cara binaria de un documento, el documento va
+        // con él a la papelera (mismo elemento lógico).
+        if ($file->document_id) {
+            Document::query()->whereKey($file->document_id)->update(['updated_by_id' => $userId]);
+            Document::query()->whereKey($file->document_id)->delete();
+        }
         $file->delete();
 
         return back()->with('success', 'Archivo enviado a la papelera.');
@@ -85,6 +105,9 @@ class FileController extends Controller
         $fileModel = File::withTrashed()->findOrFail($file);
         $this->authorize('restore', $fileModel);
         $fileModel->forceFill(['updated_by_id' => request()->user()->id])->restore();
+        if ($fileModel->document_id) {
+            Document::withTrashed()->whereKey($fileModel->document_id)->restore();
+        }
 
         return back()->with('success', 'Archivo restaurado.');
     }
@@ -95,6 +118,9 @@ class FileController extends Controller
         $this->authorize('forceDelete', $fileModel);
 
         Storage::disk(config('filesystems.default'))->delete($fileModel->storage_path);
+        if ($fileModel->document_id) {
+            Document::withTrashed()->whereKey($fileModel->document_id)->forceDelete();
+        }
         $fileModel->forceDelete();
 
         return back()->with('success', 'Archivo eliminado definitivamente.');

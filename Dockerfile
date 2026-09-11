@@ -1,6 +1,8 @@
 # PlataformaDoc en Railway: PHP 8.2 + Node 22 + Chromium (exportar PDF).
 # Se usa Dockerfile en vez de Nixpacks porque el PHP de Nixpacks no trae
 # ext-zip (PhpWord y los metadatos del .docx la exigen).
+# NOTA: el COPY va primero a propósito para que el build funcione aunque el
+# .dockerignore no esté commiteado (las dependencias se reinstalan encima).
 FROM php:8.2-cli-bookworm
 
 # Sistema: git/unzip (composer), librerías de extensiones PHP, Node.js,
@@ -19,18 +21,12 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
-# Dependencias primero (aprovecha caché de capas).
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress --no-scripts
-
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
-
-# Código, descubrimiento de paquetes, build y cachés.
 COPY . .
 RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+ && composer install --no-dev --optimize-autoloader --no-interaction --no-progress --no-scripts \
  && composer dump-autoload --optimize \
  && php artisan package:discover --ansi \
+ && npm ci --no-audit --no-fund \
  && npm run build \
  && php artisan optimize
 

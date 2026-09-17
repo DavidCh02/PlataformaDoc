@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\DueReminderDispatcher;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Throwable;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -29,6 +31,17 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        // Disparo perezoso: si el scheduler/cron no está corriendo (típico en
+        // XAMPP/Windows), igual se genera el aviso de plataforma al navegar.
+        // Sin Telegram aquí para no frenar la página; lo envía el scheduler.
+        if ($request->user()) {
+            try {
+                DueReminderDispatcher::run($request->user(), false);
+            } catch (Throwable) {
+                // Nunca romper la página por un recordatorio.
+            }
+        }
+
         return [
             ...parent::share($request),
             'auth' => [
@@ -40,6 +53,15 @@ class HandleInertiaRequests extends Middleware
                     ? $request->user()->getRoleNames()->values()
                     : [],
             ],
+            'notifications' => $request->user() ? [
+                'unread_count' => $request->user()->unreadNotifications()->count(),
+                'recent' => $request->user()->notifications()->latest()->limit(6)->get()->map(fn ($notification): array => [
+                    'id' => $notification->id,
+                    'data' => $notification->data,
+                    'read_at' => $notification->read_at?->toISOString(),
+                    'created_at' => $notification->created_at->toISOString(),
+                ])->values(),
+            ] : ['unread_count' => 0, 'recent' => []],
         ];
     }
 }

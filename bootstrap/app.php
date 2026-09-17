@@ -21,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // Railway termina TLS en su proxy: confiar en él para detectar
         // HTTPS (cookies seguras, URLs generadas, websockets).
         $middleware->trustProxies(at: '*');
+        // El webhook lo invoca Telegram sin sesión/CSRF (va firmado por secreto en la URL).
+        $middleware->validateCsrfTokens(except: ['telegram/webhook/*']);
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

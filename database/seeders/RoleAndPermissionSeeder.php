@@ -22,6 +22,8 @@ class RoleAndPermissionSeeder extends Seeder
             'files.delete',
             'docs.create',
             'docs.edit_realtime',
+            'reminders.view',
+            'reminders.manage',
             'users.manage',
         ];
 
@@ -43,6 +45,8 @@ class RoleAndPermissionSeeder extends Seeder
             'files.delete',
             'docs.create',
             'docs.edit_realtime',
+            'reminders.view',
+            'reminders.manage',
         ]);
 
         // Rol: Practicante (Crear, guardar, descargar, ver, editar docs - SIN BORRAR por defecto)
@@ -54,6 +58,8 @@ class RoleAndPermissionSeeder extends Seeder
             'files.download',
             'docs.create',
             'docs.edit_realtime',
+            'reminders.view',
+            'reminders.manage',
         ]);
 
         // Rol: Visitante (Solo visualizar y descargar)
@@ -61,6 +67,7 @@ class RoleAndPermissionSeeder extends Seeder
         $visitante->givePermissionTo([
             'files.view',
             'files.download',
+            'reminders.view',
         ]);
     }
 }

@@ -41,4 +41,12 @@ return [
         'chrome_path' => env('BROWSERSHOT_CHROME_PATH'),
     ],
 
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        // Sin @, p. ej. MiOficinaBot (se usa para el enlace t.me/...).
+        'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+        // Secreto aleatorio que protege la URL del webhook.
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+    ],
+
 ];

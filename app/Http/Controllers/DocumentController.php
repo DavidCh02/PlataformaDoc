@@ -6,8 +6,10 @@ use App\Http\Requests\ImportWordRequest;
 use App\Http\Requests\StoreDocumentRequest;
 use App\Http\Requests\SyncDocumentRequest;
 use App\Http\Requests\UpdateDocumentRequest;
+use App\Http\Requests\UploadDocumentImageRequest;
 use App\Events\DocumentUpdated;
 use App\Models\Document;
+use App\Models\DocumentImage;
 use App\Models\DocumentVersion;
 use App\Models\File;
 use App\Models\Folder;
@@ -17,6 +19,7 @@ use App\Services\DocumentModifier;
 use App\Services\DocumentPdfExporter;
 use App\Services\AuditLogger;
 use App\Services\LockManager;
+use App\Services\DocumentImageService;
 use App\Services\WordDocumentLinker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -36,7 +39,7 @@ use Throwable;
 
 class DocumentController extends Controller
 {
-    public function create(StoreDocumentRequest $request): Response
+    public function create(StoreDocumentRequest $request): RedirectResponse
     {
         $this->authorize('create', Document::class);
 
@@ -45,12 +48,17 @@ class DocumentController extends Controller
             'folder_id' => $request->validated('folder_id'),
             'user_id' => $request->user()->id,
             'content' => '<p></p>',
+            'platform_created' => true,
         ]);
 
-        return Inertia::render('Editor', [
-            'document' => $document,
-            'canEdit' => true,
-        ]);
+        // Binario .docx inicial + v1: el documento nace con Modificar,
+        // Subir versión e Historial, igual que un archivo subido.
+        $this->createInitialBinary($document, $request->user()->id, null, 'Documento inicial');
+
+        // Redirección (PRG) en vez de render directo: si se renderiza el Editor
+        // con 200 sobre la URL del POST (/documents, sin ruta GET), cualquier
+        // router.reload() o F5 posterior falla con 405 Method Not Allowed.
+        return redirect()->route('documents.edit', $document);
     }
 
     public function edit(Document $document): Response
@@ -64,16 +72,20 @@ class DocumentController extends Controller
 
         return Inertia::render('Editor', [
             'document' => $document,
-            'canEdit' => request()->user()->can('docs.edit_realtime'),
+            'canEdit' => request()->user()->can('docs.edit_realtime') || $document->user_id === request()->user()->id,
             'siblings' => $siblings,
         ]);
     }
 
-    public function update(UpdateDocumentRequest $request, Document $document): JsonResponse
+    public function update(UpdateDocumentRequest $request, Document $document, DocumentImageService $images): JsonResponse
     {
         $this->authorize('update', $document);
         $userId = $request->user()->id;
-        $document->update(array_merge($request->validated(), [
+        $validated = $request->validated();
+        if (isset($validated['content']) && is_string($validated['content'])) {
+            $validated['content'] = $images->extractEmbeddedImages($validated['content'], $document, $request->user());
+        }
+        $document->update(array_merge($validated, [
             'updated_by_id' => $userId,
         ]));
         $this->markFirstEdit($document, $userId);
@@ -84,11 +96,14 @@ class DocumentController extends Controller
         ]);
     }
 
-    public function sync(SyncDocumentRequest $request, Document $document): JsonResponse
+    public function sync(SyncDocumentRequest $request, Document $document, DocumentImageService $images): JsonResponse
     {
         $this->authorize('update', $document);
 
         $content = $request->validated('content');
+        if (is_string($content)) {
+            $content = $images->extractEmbeddedImages($content, $document, $request->user());
+        }
         if ($content !== null) {
             $document->update([
                 'content' => $content,
@@ -97,14 +112,70 @@ class DocumentController extends Controller
             $this->markFirstEdit($document, $request->user()->id);
         }
 
-        event(new DocumentUpdated(
-            documentId: $document->id,
-            userId: $request->user()->id,
-            delta: $request->validated('delta', ''),
-            content: $content,
-        ));
+        // Colaboración en vivo "best-effort": el contenido YA quedó guardado
+        // arriba. Si Reverb está caído, no convertir el guardado en un 500.
+        $broadcast = true;
+        try {
+            event(new DocumentUpdated(
+                documentId: $document->id,
+                userId: $request->user()->id,
+                delta: $request->validated('delta', ''),
+                content: $content,
+            ));
+        } catch (Throwable $exception) {
+            $broadcast = false;
+            Log::warning('Realtime broadcast failed; content was still saved.', [
+                'document_id' => $document->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
 
-        return response()->json(['broadcast' => true]);
+        return response()->json(['broadcast' => $broadcast]);
+    }
+
+    /**
+     * Sube una imagen del editor de la plataforma y devuelve su URL relativa.
+     * Guardar la URL (no el base64) mantiene los UPDATEs pequeños y evita
+     * superar max_allowed_packet de MySQL.
+     */
+    public function uploadImage(UploadDocumentImageRequest $request, Document $document, DocumentImageService $images): JsonResponse
+    {
+        $this->authorize('update', $document);
+
+        $uploaded = $request->file('image');
+        $extension = strtolower($uploaded->getClientOriginalExtension());
+        $extension = $extension === 'jpeg' ? 'jpg' : $extension;
+
+        $file = $images->storeImageFile(
+            (string) $uploaded->getContent(),
+            $extension,
+            $document,
+            $request->user(),
+            pathinfo($uploaded->getClientOriginalName(), PATHINFO_FILENAME),
+        );
+
+        return response()->json([
+            'url' => route('documents.images.show', [$document->id, $file->id], false),
+            'id' => $file->id,
+        ]);
+    }
+
+    /**
+     * Sirve una imagen vinculada al documento. Requiere permiso de vista
+     * sobre el documento (las URLs son relativas y viajan con la sesión).
+     */
+    public function showImage(Document $document, DocumentImage $image): BinaryFileResponse
+    {
+        abort_if((int) $image->document_id !== (int) $document->id, 404);
+        $this->authorize('view', $document);
+
+        $disk = config('filesystems.default');
+        abort_unless(Storage::disk($disk)->exists($image->storage_path), 404);
+
+        return response()->file(Storage::disk($disk)->path($image->storage_path), [
+            'Content-Type' => $image->mime_type ?: 'application/octet-stream',
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 
    
@@ -381,32 +452,8 @@ class DocumentController extends Controller
         abort_if($title === '', 422, 'El título es obligatorio.');
         abort_if(mb_strlen($title) > 120, 422, 'El título no puede superar 120 caracteres.');
 
-        $phpWord = new PhpWord;
-        $section = $phpWord->addSection();
-        $section->addText($title, ['bold' => true, 'size' => 16]);
-
-        $tempPath = tempnam(sys_get_temp_dir(), 'pdoc');
-        abort_if($tempPath === false, 500, 'No se pudo crear el archivo temporal.');
-        IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
-        $buffer = (string) file_get_contents($tempPath);
-        @unlink($tempPath);
-
-        $disk = config('filesystems.default');
-        $storagePath = 'files/'.$request->user()->id.'/word/'.Str::uuid().'.docx';
-        Storage::disk($disk)->put($storagePath, $buffer);
-
         $folderId = $request->integer('folder_id');
         $folderId = $folderId > 0 && Folder::query()->whereKey($folderId)->exists() ? $folderId : null;
-
-        $file = File::create([
-            'name' => pathinfo($title, PATHINFO_FILENAME),
-            'original_name' => $title.'.docx',
-            'mime_type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'storage_path' => $storagePath,
-            'file_size' => strlen($buffer),
-            'folder_id' => $folderId,
-            'user_id' => $request->user()->id,
-        ]);
 
         $document = Document::create([
             'title' => $title,
@@ -414,11 +461,10 @@ class DocumentController extends Controller
             'folder_id' => $folderId,
             'user_id' => $request->user()->id,
             'imported_from' => $title.'.docx',
+            'platform_created' => true,
         ]);
 
-        $file->forceFill(['document_id' => $document->id])->saveQuietly();
-
-        $this->registerInitialVersionForDocument($document, $file, $request->user()->id, 'Documento inicial');
+        $this->createInitialBinary($document, $request->user()->id, $title, 'Documento inicial');
 
         $auditLogger->log('document.create_word', $document, ['title' => $title]);
 
@@ -449,6 +495,45 @@ class DocumentController extends Controller
         }
 
         return redirect()->route('documents.history', $document);
+    }
+
+    /**
+     * Genera el binario .docx inicial de un documento creado en la plataforma
+     * y lo registra como v1: así nace con Modificar, Subir versión e
+     * Historial, igual que un archivo subido.
+     */
+    private function createInitialBinary(Document $document, int $userId, ?string $heading, string $summary): void
+    {
+        $phpWord = new PhpWord;
+        $section = $phpWord->addSection();
+        if ($heading !== null && trim($heading) !== '') {
+            $section->addText($heading, ['bold' => true, 'size' => 16]);
+        }
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'pdoc');
+        abort_if($tempPath === false, 500, 'No se pudo crear el archivo temporal.');
+        IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
+        $buffer = (string) file_get_contents($tempPath);
+        @unlink($tempPath);
+
+        $disk = config('filesystems.default');
+        $storagePath = 'files/'.$userId.'/word/'.Str::uuid().'.docx';
+        Storage::disk($disk)->put($storagePath, $buffer);
+
+        $baseName = $heading !== null && trim($heading) !== '' ? $heading : 'Documento';
+        $file = File::create([
+            'name' => pathinfo($baseName, PATHINFO_FILENAME),
+            'original_name' => $baseName.'.docx',
+            'mime_type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'storage_path' => $storagePath,
+            'file_size' => strlen($buffer),
+            'folder_id' => $document->folder_id,
+            'user_id' => $userId,
+        ]);
+
+        $file->forceFill(['document_id' => $document->id])->saveQuietly();
+
+        $this->registerInitialVersionForDocument($document, $file, $userId, $summary);
     }
 
     /**
@@ -601,7 +686,12 @@ class DocumentController extends Controller
     public function destroy(Document $document): RedirectResponse
     {
         $this->authorize('delete', $document);
-        $document->forceFill(['updated_by_id' => request()->user()->id])->saveQuietly();
+        $userId = request()->user()->id;
+        $document->forceFill(['updated_by_id' => $userId])->saveQuietly();
+        // El documento y sus archivos vinculados son el mismo elemento lógico:
+        // van juntos a la papelera para no obligar a borrar dos veces.
+        $document->files()->update(['updated_by_id' => $userId]);
+        $document->files()->delete();
         $document->delete();
 
         return back()->with('success', 'Documento enviado a la papelera.');
@@ -612,6 +702,7 @@ class DocumentController extends Controller
         $documentModel = Document::withTrashed()->findOrFail($document);
         $this->authorize('restore', $documentModel);
         $documentModel->forceFill(['updated_by_id' => request()->user()->id])->restore();
+        $documentModel->files()->withTrashed()->restore();
 
         return back()->with('success', 'Documento restaurado.');
     }
@@ -620,6 +711,13 @@ class DocumentController extends Controller
     {
         $documentModel = Document::withTrashed()->findOrFail($document);
         $this->authorize('forceDelete', $documentModel);
+        // Purga también los binarios vinculados (disco + filas) para no dejar
+        // huérfanos. Las versiones históricas se conservan como registro.
+        $disk = config('filesystems.default');
+        foreach ($documentModel->files()->withTrashed()->get() as $file) {
+            Storage::disk($disk)->delete($file->storage_path);
+            $file->forceDelete();
+        }
         $documentModel->forceDelete();
 
         return back()->with('success', 'Documento eliminado definitivamente.');
@@ -653,7 +751,7 @@ class DocumentController extends Controller
         }
     }
 
-    public function exportDocx(Document $document, AuditLogger $auditLogger): BinaryFileResponse|RedirectResponse
+    public function exportDocx(Document $document, AuditLogger $auditLogger, DocumentImageService $images): BinaryFileResponse|RedirectResponse
     {
         $this->authorize('view', $document);
 
@@ -679,7 +777,8 @@ class DocumentController extends Controller
             $phpWord = new PhpWord();
             $section = $phpWord->addSection();
             $section->addTitle($document->title, 1);
-            Html::addHtml($section, $document->content ?: '<p></p>', false, false);
+            $html = $images->inlineImagesForExport($document->content ?: '<p></p>');
+            Html::addHtml($section, $html, true, true);
 
             $directory = storage_path('app/temp/docx');
             \Illuminate\Support\Facades\File::ensureDirectoryExists($directory);

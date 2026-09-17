@@ -32,6 +32,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'telegram_chat_id',
+        'telegram_link_token',
     ];
 
     /**
@@ -55,6 +57,22 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /** ¿Tiene el chat de Telegram vinculado para recibir avisos? */
+    public function telegramLinked(): bool
+    {
+        return trim((string) $this->telegram_chat_id) !== '';
+    }
+
+    /** Genera (si falta) y devuelve el token de vinculación con el bot. */
+    public function ensureTelegramLinkToken(): string
+    {
+        if (trim((string) $this->telegram_link_token) === '') {
+            $this->forceFill(['telegram_link_token' => bin2hex(random_bytes(16))])->save();
+        }
+
+        return $this->telegram_link_token;
     }
 
     public function folders(): HasMany

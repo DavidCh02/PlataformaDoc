@@ -7,7 +7,10 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentHistoryController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\FolderController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReminderController;
+use App\Http\Controllers\TelegramController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -67,6 +70,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/files/{file}/link-word', [DocumentController::class, 'linkWord'])->name('files.link-word');
 
     Route::get('/documents/{document}/history', [DocumentHistoryController::class, 'show'])->name('documents.history');
+
+    Route::get('/reminders', [ReminderController::class, 'index'])->name('reminders.index');
+    Route::post('/reminders', [ReminderController::class, 'store'])->name('reminders.store');
+    Route::patch('/reminders/{reminder}', [ReminderController::class, 'update'])->name('reminders.update');
+    Route::delete('/reminders/{reminder}', [ReminderController::class, 'destroy'])->name('reminders.destroy');
+    Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
+    Route::post('/telegram/test', [TelegramController::class, 'test'])->name('telegram.test');
+    Route::post('/telegram/unlink', [TelegramController::class, 'unlink'])->name('telegram.unlink');
     Route::post('/documents/versions/{version}/annotations', [DocumentHistoryController::class, 'storeAnnotation'])->name('document-versions.annotations');
     Route::get('/documents/versions/{version}/download', [DocumentHistoryController::class, 'download'])->name('document-versions.download');
 });
@@ -88,5 +100,8 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
+
+// Webhook de Telegram (lo llama Telegram, sin login; protegido por secreto en la URL).
+Route::post('/telegram/webhook/{secret}', [TelegramController::class, 'webhook'])->name('telegram.webhook');
 
 require __DIR__.'/auth.php';

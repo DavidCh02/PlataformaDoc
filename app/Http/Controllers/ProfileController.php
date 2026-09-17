@@ -18,9 +18,18 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user();
+        $linkToken = $user->ensureTelegramLinkToken();
+
         return Inertia::render('Profile/Edit', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => session('status'),
+            'telegram' => [
+                'configured' => \App\Services\TelegramNotifier::enabled(),
+                'bot_username' => \App\Services\TelegramNotifier::botUsername(),
+                'linked' => $user->telegramLinked(),
+                'link_url' => \App\Services\TelegramNotifier::linkFor($linkToken),
+            ],
         ]);
     }
 

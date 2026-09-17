@@ -27,7 +27,9 @@ class DueReminderDispatcher
      */
     public static function run(?User $scopeUser = null, bool $withTelegram = true): int
     {
-        $now = now();
+        // Hora OFICIAL (internet, America/Guayaquil): el disparo no depende
+        // del reloj del equipo donde corre el servidor.
+        $now = OfficialTime::now();
         $query = Reminder::query()
             ->with(['assignee', 'creator', 'recipients'])
             ->where('status', Reminder::STATUS_PENDING)
@@ -62,7 +64,7 @@ class DueReminderDispatcher
                 if ($reminder->notify_at === null) {
                     $reminder->notify_at = $reminder->scheduled_at;
                 }
-                $late = $reminder->scheduled_at->lt(now()->subMinute());
+                $late = $reminder->scheduled_at->lt($now->copy()->subMinute());
 
                 // Todos los destinatarios (el calendario es global; el aviso es multi-usuario).
                 // El $scopeUser solo elige QUÉ recordatorios revisar, pero el aviso
@@ -77,13 +79,13 @@ class DueReminderDispatcher
                     $claimed = Reminder::query()
                         ->whereKey($reminder->getKey())
                         ->whereNull('notified_at')
-                        ->update(['notified_at' => now()]);
+                        ->update(['notified_at' => $now->copy()]);
 
                     if ($claimed > 0) {
                         foreach ($targets as $target) {
                             $target->notify(new ReminderDue($reminder, $late));
                         }
-                        $reminder->notified_at = now();
+                        $reminder->notified_at = $now->copy();
                         $sent++;
                     }
                 }

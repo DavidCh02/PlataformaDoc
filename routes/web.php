@@ -7,6 +7,7 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentHistoryController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\FolderController;
+use App\Http\Controllers\LabController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReminderController;
@@ -75,6 +76,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/reminders', [ReminderController::class, 'store'])->name('reminders.store');
     Route::patch('/reminders/{reminder}', [ReminderController::class, 'update'])->name('reminders.update');
     Route::delete('/reminders/{reminder}', [ReminderController::class, 'destroy'])->name('reminders.destroy');
+    // DEBUG solo-admin: adelantar un recordatorio a Telegram aunque no sea la hora.
+    Route::post('/reminders/{reminder}/fire-now', [ReminderController::class, 'fireNow'])->name('reminders.fire-now');
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
     Route::post('/telegram/test', [TelegramController::class, 'test'])->name('telegram.test');
@@ -103,5 +106,25 @@ Route::middleware('auth')->group(function () {
 
 // Webhook de Telegram (lo llama Telegram, sin login; protegido por secreto en la URL).
 Route::post('/telegram/webhook/{secret}', [TelegramController::class, 'webhook'])->name('telegram.webhook');
+
+// ---------------------------------------------------------------------------
+// Lab secreto de diagnóstico: consola oculta solo para administradores.
+// - No hay enlaces hacia aquí en la app: solo se entra con la URL directa.
+// - Tiene su propio login (email + contraseña) y exige `users.manage`.
+// - Configura la URL con LAB_PATH y desactívalo con LAB_ENABLED=false.
+// ---------------------------------------------------------------------------
+$labBase = trim((string) config('lab.path', 'soporte-lab-7x9q2'), '/');
+Route::prefix($labBase)->name('lab.')->group(function () {
+    Route::get('/', [LabController::class, 'show'])->name('show');
+    Route::post('/login', [LabController::class, 'login'])->middleware('throttle:20,1')->name('login');
+    Route::post('/logout', [LabController::class, 'logout'])->name('logout');
+    Route::get('/api/checklist', [LabController::class, 'checklist'])->name('checklist');
+    Route::get('/api/reminders', [LabController::class, 'reminders'])->name('reminders');
+    Route::post('/api/reminders/{reminder}/fire', [LabController::class, 'fireReminder'])->name('fire');
+    Route::post('/api/dispatch-now', [LabController::class, 'dispatchNow'])->name('dispatch');
+    Route::post('/api/telegram-test', [LabController::class, 'telegramTest'])->name('telegram-test');
+    Route::get('/api/users', [LabController::class, 'users'])->name('users');
+    Route::get('/api/logs', [LabController::class, 'logs'])->name('logs');
+});
 
 require __DIR__.'/auth.php';

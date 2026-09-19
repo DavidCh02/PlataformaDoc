@@ -1,9 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlarmClock, AlertTriangle, BellPlus, BellRing, CalendarCheck, CalendarDays, CalendarX,
-    Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Copy, Hourglass, Plus, Search, Trash2, User, X,
+    Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Copy, FlaskConical, Hourglass, Plus, Search, Trash2, User, X,
 } from 'lucide-vue-next';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConfirmModal from '@/Components/ConfirmModal.vue';
@@ -12,6 +12,7 @@ const props = defineProps({
     reminders: { type: Array, default: () => [] },
     users: { type: Array, default: () => [] },
     canManage: { type: Boolean, default: false },
+    canDebug: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -26,11 +27,27 @@ const recipientLabel = reminder => {
 };
 
 // Toda la app trabaja en hora de Ecuador (America/Guayaquil, UTC-5 sin DST).
+// La referencia de "ahora" es la HORA DEL SERVIDOR (prop serverNow que envía
+// el backend): así la página NO depende del reloj del dispositivo, que puede
+// estar adelantado o atrasado. Se calcula el desfase una vez al cargar y de
+// ahí en adelante `serverNow()` lo compensa.
 const APP_TZ = 'America/Guayaquil';
 const ECUADOR_OFFSET = '-05:00';
+const clockSkew = page.props.serverNow ? (new Date(page.props.serverNow).getTime() - Date.now()) : 0;
+const serverNow = () => new Date(Date.now() + clockSkew);
+// Reloj oficial visible: anclado a la hora del backend al cargar y avanzando
+// con el paso del tiempo (no con el reloj del dispositivo). Así muestra la
+// fecha/hora que realmente rige los recordatorios.
+const officialBase = page.props.serverNow ? new Date(page.props.serverNow).getTime() : Date.now();
+const bootTime = Date.now();
+const officialTick = ref(officialBase);
+let clockTimer = null;
+onMounted(() => { clockTimer = setInterval(() => { officialTick.value = officialBase + (Date.now() - bootTime); }, 1000); });
+onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); });
+const officialLabel = computed(() => new Date(officialTick.value).toLocaleString('es-EC', { timeZone: APP_TZ, weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 const parseISO = iso => new Date(iso);
 const toKey = date => new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
-const todayKey = toKey(new Date());
+const todayKey = toKey(serverNow());
 const toTimeInEcuador = date => {
     const parts = new Intl.DateTimeFormat('es-EC', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(date);
     let h = parts.find(p => p.type === 'hour')?.value ?? '09';
@@ -39,7 +56,7 @@ const toTimeInEcuador = date => {
     return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
 };
 
-const cursor = ref(new Date());
+const cursor = ref(serverNow());
 const cursorYear = computed(() => cursor.value.getFullYear());
 const cursorMonth = computed(() => cursor.value.getMonth());
 const monthLabel = computed(() => cursor.value.toLocaleDateString('es-EC', { timeZone: APP_TZ, month: 'long', year: 'numeric' }));
@@ -57,10 +74,10 @@ const cells = computed(() => {
 
 const prevMonth = () => { cursor.value = new Date(cursorYear.value, cursorMonth.value - 1, 1); };
 const nextMonth = () => { cursor.value = new Date(cursorYear.value, cursorMonth.value + 1, 1); };
-const goToday = () => { cursor.value = new Date(); selectedDay.value = new Date(); };
+const goToday = () => { cursor.value = serverNow(); selectedDay.value = serverNow(); };
 
 // Día seleccionado para la agenda.
-const selectedDay = ref(new Date());
+const selectedDay = ref(serverNow());
 const selectedKey = computed(() => toKey(selectedDay.value));
 const selectedLabel = computed(() => selectedDay.value.toLocaleDateString('es-EC', { timeZone: APP_TZ, weekday: 'long', day: 'numeric', month: 'long' }));
 const selectDay = day => { if (day) selectedDay.value = day; };
@@ -82,7 +99,7 @@ const matchesSearch = reminder => {
 };
 const matchesFilter = reminder => {
     const d = parseISO(reminder.scheduled_at);
-    const now = new Date();
+    const now = serverNow();
     switch (filter.value) {
         case 'pending': return reminder.status === 'pending' && d >= now;
         case 'overdue': return reminder.status === 'pending' && d < now;
@@ -98,8 +115,8 @@ const remindersForDay = day => {
         .filter(reminder => toKey(parseISO(reminder.scheduled_at)) === key)
         .sort((a, b) => parseISO(a.scheduled_at) - parseISO(b.scheduled_at));
 };
-const dayHasOverdue = day => remindersForDay(day).some(r => r.status === 'pending' && parseISO(r.scheduled_at) < new Date());
-const isOverdue = reminder => reminder.status === 'pending' && parseISO(reminder.scheduled_at) < new Date();
+const dayHasOverdue = day => remindersForDay(day).some(r => r.status === 'pending' && parseISO(r.scheduled_at) < serverNow());
+const isOverdue = reminder => reminder.status === 'pending' && parseISO(reminder.scheduled_at) < serverNow();
 const fmtTime = iso => parseISO(iso).toLocaleTimeString('es-EC', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit' });
 const fmtDateTime = iso => parseISO(iso).toLocaleString('es-EC', { timeZone: APP_TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 const beforeLabel = min => {
@@ -111,13 +128,13 @@ const beforeLabel = min => {
     return `${Math.round(min / 1440 * 10) / 10} día(s) antes`;
 };
 
-const pendingCount = computed(() => props.reminders.filter(r => r.status === 'pending' && parseISO(r.scheduled_at) >= new Date()).length);
+const pendingCount = computed(() => props.reminders.filter(r => r.status === 'pending' && parseISO(r.scheduled_at) >= serverNow()).length);
 const overdueList = computed(() => props.reminders
-    .filter(r => r.status === 'pending' && parseISO(r.scheduled_at) < new Date() && matchesSearch(r))
+    .filter(r => r.status === 'pending' && parseISO(r.scheduled_at) < serverNow() && matchesSearch(r))
     .sort((a, b) => parseISO(a.scheduled_at) - parseISO(b.scheduled_at)));
 const upcoming = computed(() => props.reminders
     .filter(r => matchesSearch(r) && matchesFilter(r) && !(filter.value === 'all' && r.status !== 'pending'))
-    .filter(r => filter.value === 'all' ? (r.status === 'pending' && parseISO(r.scheduled_at) >= new Date()) : true)
+    .filter(r => filter.value === 'all' ? (r.status === 'pending' && parseISO(r.scheduled_at) >= serverNow()) : true)
     .sort((a, b) => parseISO(a.scheduled_at) - parseISO(b.scheduled_at))
     .slice(0, 10));
 const agenda = computed(() => remindersForDay(selectedDay.value).filter(matchesSearch));
@@ -150,7 +167,7 @@ const openCreate = day => {
     editingId.value = null;
     form.reset();
     form.clearErrors();
-    form.date = toKey(day || selectedDay.value || new Date());
+    form.date = toKey(day || selectedDay.value || serverNow());
     form.time = '09:00';
     form.remind_before = 10;
     form.remind_custom = '';
@@ -212,6 +229,18 @@ const toggleDone = reminder => router.patch(
     { status: reminder.status === 'done' ? 'pending' : 'done' },
     { preserveScroll: true },
 );
+// DEBUG solo-admin: adelanta el recordatorio y lo envía a Telegram AHORA
+// aunque todavía no sea la hora. El backend devuelve el error exacto si falla.
+const firingId = ref(null);
+const fireNow = reminder => {
+    if (!reminder) return;
+    if (!confirm(`¿Enviar AHORA por Telegram el recordatorio "${reminder.title}" aunque no sea la hora? (modo prueba)`)) return;
+    firingId.value = reminder.id;
+    router.post(route('reminders.fire-now', reminder.id), {}, {
+        preserveScroll: true,
+        onFinish: () => { firingId.value = null; },
+    });
+};
 const withOffset = date => {
     const p = n => String(n).padStart(2, '0');
     const key = new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
@@ -257,6 +286,7 @@ const doDelete = () => {
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">PlataformaDoc · hora Ecuador (UTC−5)</p>
                         <h2 class="text-2xl font-extrabold capitalize text-slate-900 dark:text-white">Recordatorios</h2>
+                        <p class="mt-1 inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-2.5 py-1 font-mono text-[0.72rem] font-bold tabular-nums text-emerald-300 dark:bg-slate-950 dark:ring-1 dark:ring-slate-700" title="Hora oficial que rige los avisos (internet, Ecuador). No depende del reloj de tu dispositivo.">🕑 {{ officialLabel }}</p>
                     </div>
                 </div>
                 <button v-if="canManage" type="button" class="explorer-primary-button !px-4 !py-2.5 !text-sm !shadow-lg !shadow-sky-500/25" @click="openCreate()"><Plus :size="16" />Nuevo recordatorio</button>
@@ -266,6 +296,9 @@ const doDelete = () => {
         <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             <div v-if="$page.props.flash?.success" class="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-300">
                 <CheckCircle2 :size="16" />{{ $page.props.flash.success }}
+            </div>
+            <div v-if="$page.props.errors?.debug_fire" class="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900 dark:bg-red-950/70 dark:text-red-300">
+                <AlertTriangle :size="16" class="mt-0.5 shrink-0" /><span>🧪 Prueba Telegram: {{ $page.props.errors.debug_fire }}</span>
             </div>
 
             <!-- Tarjetas resumen -->
@@ -372,6 +405,7 @@ const doDelete = () => {
                                         <span v-if="recipientLabel(reminder)" class="flex items-center gap-0.5" :title="recipientNames(reminder).join(', ')"><User :size="11" />👥 {{ recipientLabel(reminder) }}</span>
                                     </span>
                                 </button>
+                                <button v-if="canDebug" type="button" title="Probar Telegram AHORA (debug, aunque no sea la hora)" class="mt-0.5 shrink-0 rounded-lg p-1.5 text-violet-500 transition hover:bg-violet-100 hover:text-violet-700 disabled:opacity-50 dark:hover:bg-violet-950" :disabled="firingId === reminder.id" @click="fireNow(reminder)"><FlaskConical :size="14" /></button>
                             </div>
                         </div>
                     </section>
@@ -405,9 +439,10 @@ const doDelete = () => {
                                         <span v-if="recipientLabel(reminder)" class="inline-flex items-center gap-0.5" :title="recipientNames(reminder).join(', ')"><User :size="11" />👥 {{ recipientLabel(reminder) }}</span>
                                     </span>
                                 </button>
-                                <span v-if="canManage" class="flex shrink-0 gap-1 opacity-0 transition group-hover:opacity-100">
-                                    <button type="button" title="Posponer 1 hora" class="rounded-lg p-1.5 text-slate-400 hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-950" @click="postpone(reminder, 60)"><Clock :size="13" /></button>
-                                    <button type="button" title="Duplicar mañana" class="rounded-lg p-1.5 text-slate-400 hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-950" @click="duplicate(reminder)"><Copy :size="13" /></button>
+                                <span v-if="canManage || canDebug" class="flex shrink-0 gap-1 opacity-0 transition group-hover:opacity-100">
+                                    <button v-if="canDebug" type="button" title="Probar Telegram AHORA (debug, aunque no sea la hora)" class="rounded-lg p-1.5 text-violet-400 hover:bg-violet-100 hover:text-violet-600 disabled:opacity-50 dark:hover:bg-violet-950" :disabled="firingId === reminder.id" @click="fireNow(reminder)"><FlaskConical :size="13" /></button>
+                                    <button v-if="canManage" type="button" title="Posponer 1 hora" class="rounded-lg p-1.5 text-slate-400 hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-950" @click="postpone(reminder, 60)"><Clock :size="13" /></button>
+                                    <button v-if="canManage" type="button" title="Duplicar mañana" class="rounded-lg p-1.5 text-slate-400 hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-950" @click="duplicate(reminder)"><Copy :size="13" /></button>
                                 </span>
                             </li>
                         </ul>
@@ -496,6 +531,7 @@ const doDelete = () => {
 
                 <div class="flex items-center gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3.5 dark:border-slate-700 dark:bg-slate-800/60">
                     <button v-if="editingId && canManage" type="button" class="flex items-center gap-1 rounded-xl border border-red-200 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950" @click="askDelete"><Trash2 :size="14" />Eliminar</button>
+                    <button v-if="editingId && canDebug" type="button" title="Enviar por Telegram AHORA aunque no sea la hora (solo prueba)" class="flex items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-600 transition hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950" :disabled="firingId === editingId" @click="showModal = false; fireNow(props.reminders.find(r => r.id === editingId))"><FlaskConical :size="14" />{{ firingId === editingId ? 'Enviando…' : 'Probar Telegram' }}</button>
                     <span class="flex-1"></span>
                     <button type="button" class="rounded-xl px-3.5 py-2 text-xs font-bold text-slate-500 transition hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-700" @click="showModal = false">{{ canManage ? 'Cancelar' : 'Cerrar' }}</button>
                     <button v-if="!canManage && editingId" type="button" class="explorer-primary-button" @click="modalToggleDone"><Check :size="14" />Marcar realizado</button>

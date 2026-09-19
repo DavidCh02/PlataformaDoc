@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Reminder;
 use App\Models\User;
+use App\Services\ReminderDebugSender;
+use App\Services\OfficialTime;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -47,6 +49,8 @@ class ReminderController extends Controller
                 ? User::query()->orderBy('name')->get(['id', 'name'])
                 : [['id' => $user->id, 'name' => $user->name]],
             'canManage' => $manage,
+            // Debug: solo administradores (users.manage) ven el botón "Probar Telegram".
+            'canDebug' => $user->can('users.manage'),
         ]);
     }
 
@@ -131,7 +135,7 @@ class ReminderController extends Controller
             $reminder->fill($validated);
 
             // Si se reprograma (o cambia el pre-aviso) a futuro tras haber avisado, se rearma el aviso.
-            if ($rescheduled && $reminder->effectiveNotifyAt()->isFuture() && $reminder->notified_at) {
+            if ($rescheduled && $reminder->effectiveNotifyAt()->greaterThan(OfficialTime::now()) && $reminder->notified_at) {
                 $reminder->forceFill(['notified_at' => null, 'telegram_sent' => false]);
             }
 
@@ -156,6 +160,36 @@ class ReminderController extends Controller
         $reminder->delete();
 
         return back()->with('success', 'Recordatorio eliminado.');
+    }
+
+    /**
+     * DEBUG (solo admins con users.manage): adelanta el recordatorio y lo
+     * envía a Telegram AHORA aunque todavía no sea la hora, para verificar
+     * que el aviso llega bien. No "quema" el aviso real: si no llega a
+     * todos, el telegram_sent no queda marcado como definitivo.
+     */
+    public function fireNow(Request $request, Reminder $reminder): RedirectResponse
+    {
+        abort_unless($request->user()->can('users.manage'), 403);
+
+        try {
+            $trace = ReminderDebugSender::fire($reminder, true);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['debug_fire' => 'Error inesperado: '.$e->getMessage()]);
+        }
+
+        if ($trace['ok']) {
+            $names = collect($trace['targets'])->where('sent', true)->pluck('name')->implode(', ');
+
+            return back()->with('success', "🧪 Prueba enviada por Telegram a: {$names}.");
+        }
+
+        $errors = collect($trace['targets'])
+            ->map(fn ($t) => $t['name'].': '.($t['error'] ?? 'falló'))
+            ->implode(' | ');
+        $hint = $trace['hint'] !== '' ? ' '.$trace['hint'] : '';
+
+        return back()->withErrors(['debug_fire' => "No se pudo entregar. {$errors}.{$hint}"]);
     }
 
     /**
